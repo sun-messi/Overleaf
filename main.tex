@@ -1,0 +1,3405 @@
+\documentclass{article}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{natbib}
+\usepackage{xcolor}
+\usepackage{algorithm2e}
+
+% ====== theorem environments (aligned with VLM paper) ======
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}{Lemma}[section]
+\newtheorem{assumption}{Assumption}[section]
+\newtheorem{definition}{Definition}[section]
+\newtheorem{corollary}{Corollary}[section]
+\newtheorem{remark}{Remark}[section]
+
+\title{Diffusion Model}
+\date{Sep 2025}
+
+\begin{document}
+
+\maketitle
+
+\section{Learner Network and Diffusion Model}
+
+We consider a one-hidden-layer ReLU network \( g : \mathbb{R}^{d_1} \rightarrow \mathbb{R}^{d_1} \) of the form
+\begin{equation}
+g(x) = V^{\top} \sigma(W x - b),
+\end{equation}
+where \(W \in \mathbb{R}^{m \times d_1}\), \(V \in \mathbb{R}^{m \times d_1}\), and \(\sigma\) is the ReLU activation.
+
+During training, the clean signal \(x_0 \in \mathbb{R}^{d_1}\) is perturbed with Gaussian noise,
+\begin{equation}
+x_{\tau} = x_0 + \tau\epsilon, \qquad \epsilon \sim \mathcal{N}(0,I),
+\end{equation}
+where \(\tau \sim \mathrm{Unif}[\tau_{\min}, \tau_{\max}]\). The diffusion objective is
+\begin{equation}
+L_{\mathrm{DM}} 
+= \mathbb{E}_{x_0, t}\, \tfrac{1}{2} \| g(x_{\tau}) - x_0\|_2^2.
+\end{equation}
+
+The clean signal admits a structured decomposition
+\begin{equation}
+x_0 = \alpha_1 \mathbf{M}_1 z_1 + \alpha_2 \mathbf{M}_2 z_2,
+\end{equation}
+where \(\mathbf{M}_1, \mathbf{M}_2 \in \mathbb{R}^{d_1 \times d}\) are orthonormal dictionaries, \(z_1, z_2\) are sparse codes, and
+\begin{equation}
+\alpha_1 = \Theta(1), \qquad \alpha_2 = \Theta(1/d^{c_0}).
+\end{equation}
+
+\subsection{Parameter Updates}
+We perform stochastic gradient descent on the diffusion objective.
+We update as
+\begin{equation}
+w_i^{(t+1)} \leftarrow w_i^{(t)} - \eta \nabla_{w_i} L_{\mathrm{DM}}^{(t)}
+\end{equation}
+\begin{equation}
+v_i^{(t+1)} \leftarrow v_i^{(t)} - \eta \nabla_{v_i} L_{\mathrm{DM}}^{(t)}
+\end{equation}
+\begin{equation}
+b_i^{(t+1)} \leftarrow b_i^{(t)} - \eta_b \nabla_{b_i} L_{\mathrm{DM}}^{(t)}
+\end{equation}
+
+
+
+The gradients of \(L_{\mathrm{DM}}\) with respect to \(v_i\), \(w_i\), and \(b_i\) are
+\begin{equation}
+\frac{\partial L}{\partial v_i}
+= w_i^{\top} x_{\tau}\, (g(x_{\tau}) - x_0)\, 
+\mathbf{1}\{ w_i^{\top} x_{\tau} \ge b_i^{(t)} \},
+\end{equation}
+
+\begin{equation}
+\frac{\partial L}{\partial w_i}
+= v_i^{\top}(g(x_{\tau}) - x_0)\, x_{\tau}^{\top}
+\, \mathbf{1}\{ w_i^{\top} x_{\tau} \ge b_i^{(t)} \},
+\end{equation}
+
+\begin{equation}
+\frac{\partial L}{\partial b_i}
+= - v_i^{\top}(g(x_{\tau}) - x_0)\,
+\mathbf{1}\{ w_i^{\top} x_{\tau} \ge b_i^{(t)}\}.
+\end{equation}
+
+The parameter updates follow
+\begin{equation}
+w_i^{(t+1)} 
+= w_i^{(t)} 
++ \eta\, 
+\langle v_i^{(t)}, x_0 - g^{(t)}(x_{\tau}) \rangle 
+x_{\tau}^{\top}
+\, \mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \},
+\end{equation}
+
+\begin{equation}
+v_i^{(t+1)} 
+= v_i^{(t)} 
++ \eta\, 
+(x_0 - g^{(t)}(x_{\tau})) 
+\big(w_i^{(t)\top} x_{\tau}\big)
+\, \mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \},
+\end{equation}
+
+\begin{equation}
+b_i^{(t+1)}
+= b_i^{(t)} 
+- \eta_b\,
+\langle v_i^{(t)}, x_0 - g^{(t)}(x_{\tau}) \rangle
+\, \mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}.
+\end{equation}
+
+
+\section{Stage I: \(\mathbf{M}_{1}\) Alignment Phase}
+During the initial training stage, when \( \tau_1< \tau < \tau_{\max}\) and 
+\(\mathbf{x}_{\tau} = \mathbf{x}_0 + \tau \epsilon\), 
+the diffusion model predominantly aligns its parameters with the dominant dictionary \(\mathbf{M}_1\). 
+The weak component \(\mathbf{M}_2\) remains suppressed due to the imbalance 
+\(\alpha_1 = \Theta(1)\) and \(\alpha_2 = \Theta(1/d^{c_0})\). 
+
+Let the length of this training phase be denoted by \(T_1\). 
+Throughout this stage, the projection of \(w_i^{(t)}\) and \(v_i^{(t)}\) onto \(\mathbf{M}_1\) grows 
+monotonically while the components along \(\mathbf{M}_2\) remain at initialization scale. 
+
+
+\subsection{Alignment Growth for Neurons in \(S_{1j,\mathrm{sure}}\)}
+
+This section analyzes the alignment behavior of neurons \(i \in S_{1j,\mathrm{sure}}\). 
+For each \(j \in [d]\), when \(i \in S_{1j,\mathrm{sure}}\), the projection 
+\(\langle w_i^{(t)} , \mathbf{M}_{1j} \rangle\) increases exponentially throughout the early stage 
+\(t \le T_1\). 
+This growth is driven by the dominant signal along the \(\mathbf{M}_1\) directions and the fact that 
+the noise level in this stage does not disrupt the alignment dynamics.
+
+
+When the input satisfies 
+\(x_{\tau}= x_0 + \tau \epsilon\)
+and \( |z_{1j}| = 1 \), 
+the SGD updates from the diffusion objective follow:
+\begin{equation}
+w_i^{(t+1)} 
+= w_i^{(t)} 
++ \eta\, 
+\langle v_i^{(t)}, x_0 - g^{(t)}(x_{\tau}) \rangle 
+x_{\tau}
+\, \mathbf{1}\{ w_i^{(t)\top} x_{\tau}\ge b_i^{(t)} \},
+\end{equation}
+
+\begin{equation}
+v_i^{(t+1)} 
+= v_i^{(t)} 
++ \eta\, 
+(x_0 - g^{(t)}(x_{\tau}))
+\big(w_i^{(t)\top} x_{\tau}\big)
+\, \mathbf{1}\{ w_i^{(t)\top} x_{\tau}\ge b_i^{(t)} \},
+\end{equation}
+\begin{equation}
+b_i^{(t+1)}
+= b_i^{(t)} 
+- \eta_b\,
+\langle v_i^{(t)}, x_0 - g^{(t)}(x_{\tau}) \rangle
+\, \mathbf{1}\{ w_i^{(t)\top} x_{\tau}\ge b_i^{(t)} \}.
+\end{equation}
+
+We now project these updates onto the feature direction \(\mathbf{M}_{1j}\).
+Since \(x_0\) contains \(\mathbf{M}_{1j}\),
+the projected update for \(w_i^{(t+1)}\) becomes:
+\begin{equation}
+\label{eq:update-w-proj}
+\begin{aligned}
+\langle w_i^{(t+1)}, \mathbf{M}_{1j} \rangle
+&=
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle
++
+\eta\,
+\langle v_i^{(t)}, \mathbf{M}_{1j} \rangle\, 
+z_{1j}\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau}\ge b_i^{(t)} \}
+\pm Err_t ,
+\end{aligned}
+\end{equation}
+where \(Err_t\) collects contributions from  
+the Gaussian perturbation \(\langle\tau\epsilon, \mathbf{M}_{1j}\rangle \),
+the  component \(\mathbf{M}_2\),
+and subdominant cross-terms inside \(g^{(t)}(x_{\tau})\).
+
+Similarly, projecting the update of \(v_i^{(t+1)}\) onto \(\mathbf{M}_{1j}\) yields:
+\begin{equation}
+\label{eq:update-v-proj}
+\begin{aligned}
+\langle v_i^{(t+1)}, \mathbf{M}_{1j} \rangle
+&=
+\langle v_i^{(t)}, \mathbf{M}_{1j} \rangle
++
+\eta\,
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle\, 
+z_{1j}\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau}\ge b_i^{(t)} \}
+\pm Err_t .
+\end{aligned}
+\end{equation}
+
+
+When \(x_0\) does not contain \(\mathbf{M}_{1j}\), the bias update satisfies
+\begin{equation}
+\label{eq:bias-update-no-M1j}
+\begin{aligned}
+b_i^{(t+1)}
+=
+b_i^{(t)}
++
+\eta_b\, \| v_i^{(t)} \|_2^2 \,
+\langle w_i^{(t)}, x_\tau \rangle\,
+\mathbf{1}\{ w_i^{(t)\top} x_\tau \ge b_i^{(t)} \}.
+\end{aligned}
+\end{equation}
+
+When \(x_0\) contains the feature component \(\mathbf{M}_{1j}\), the update becomes
+\begin{equation}
+\label{eq:bias-update-with-M1j}
+\begin{aligned}
+b_i^{(t+1)}
+=
+b_i^{(t)}
+-
+\eta_b\, 
+\langle v_i^{(t)}, x_0 \rangle\,
+\mathbf{1}\{ w_i^{(t)\top} x_\tau \ge b_i^{(t)} \}.
+\end{aligned}
+\end{equation}
+
+Since the event \( \mathbf{1}\{ w_i^{(t)\top} x_\tau \ge b_i^{(t)} \} \) occurs with much larger probability 
+for samples where \(x_0\) does not contain \(\mathbf{M}_{1j}\), we have
+\begin{equation}
+\label{eq:gating-prob-comparison}
+\Pr\!\left( \mathbf{1}\{ w_i^{(t)\top} x_\tau \ge b_i^{(t)} \} \mid |z_{1j}| = 0 \right)
+\gg
+\Pr\!\left( \mathbf{1}\{ w_i^{(t)\top} x_\tau \ge b_i^{(t)} \} \mid |z_{1j}| = 1 \right).
+\end{equation}
+Therefore, the bias dynamics are dominated by the update in 
+\eqref{eq:bias-update-no-M1j}, and the contribution from 
+\eqref{eq:bias-update-with-M1j} is negligible during Stage~I.
+
+
+
+The weight dynamics for \(|\langle w_i^{(t+1)}, \mathbf{M}_{1j} \rangle|\) and \(|\langle v_i^{(t+1)}, \mathbf{M}_{1j} \rangle|\) can be expressed as:
+
+\begin{equation}
+\begin{aligned}
+\langle w_i^{(t+1)}, \mathbf{M}_{1j} \rangle
+&=
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle
++
+\eta\, \langle v_i^{(t)}, \mathbf{M}_{1j} \rangle z_{1j}\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau}\ge b_i^{(t)} \}
+\pm Err_t \\[4pt]
+&=
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle
++
+\Theta \left( \frac{\eta}{d} \right)
+\langle v_i^{(t)}, \mathbf{M}_{1j} \rangle \pm Err_t ,
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+\langle v_i^{(t+1)}, \mathbf{M}_{1j} \rangle
+&=
+\langle v_i^{(t)}, \mathbf{M}_{1j} \rangle
++
+\eta\, \langle w_i^{(t)}, \mathbf{M}_{1j} \rangle z_{1j}\,
+\mathbf{1}\{ w_i^{(t)\top} x_\tau \ge b_i^{(t)} \}
+\pm Err_t \\[4pt]
+&=
+\langle v_i^{(t)}, \mathbf{M}_{1j} \rangle
++
+\Theta\left( \frac{\eta}{d} \right)
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle \pm Err_t .
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+\begin{bmatrix}
+\langle w_i^{(t+1)}, \mathbf{M}_{1j} \rangle \\
+\langle v_i^{(t+1)}, \mathbf{M}_{1j} \rangle
+\end{bmatrix}
+=
+\begin{bmatrix}
+1 & a_t \\
+a_t & 1
+\end{bmatrix}
+\begin{bmatrix}
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle \\
+\langle v_i^{(t)}, \mathbf{M}_{1j} \rangle
+\end{bmatrix}
+\pm Err_t,
+\end{equation}
+where
+\begin{equation}
+a_t = \Theta\left( \frac{\eta}{d} \right)
+\end{equation}
+
+\begin{equation}
+\begin{bmatrix}
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle \\
+\langle v_i^{(t)}, \mathbf{M}_{1j} \rangle
+\end{bmatrix}
+=
+\left(
+\begin{bmatrix}
+1 & a_t \\
+a_t & 1
+\end{bmatrix}
+\right)
+\begin{bmatrix}
+\langle w_i^{(0)}, \mathbf{M}_{1j} \rangle \\
+\langle v_i^{(0)}, \mathbf{M}_{1j} \rangle
+\end{bmatrix}
+\pm \sum_{s=0}^{t-1} Err_s.
+\end{equation}
+
+\begin{equation}
+\label{eq:wi-dynamics-M1j}
+\begin{aligned}
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle
+&=
+\frac{(1+a_t)^t + (1-a_t)^t}{2}\,
+\langle w_i^{(0)}, \mathbf{M}_{1j} \rangle
++
+\frac{(1+a_t)^t - (1-a_t)^t}{2}\,
+\langle v_i^{(0)}, \mathbf{M}_{1j} \rangle \\[6pt]
+&=
+\big(1 + \Theta(\tfrac{\eta}{d})\big)^{t}\,
+\frac{
+\langle w_i^{(0)}, \mathbf{M}_{1j} \rangle
++
+\langle v_i^{(0)}, \mathbf{M}_{1j} \rangle
+}{2} \\[6pt]
+&\ge   \color{red}{\text{TBD: plug in $T_1$ and initial}}
+\end{aligned}
+\end{equation}
+
+
+\begin{equation}
+\langle w_i^{(T_1)}, \mathbf{M}_{1j} \rangle
+\;\ge\;
+(1 - o(1))\, \| w_i^{(T_1)} \|_2 .
+\end{equation}
+
+
+
+\begin{equation}
+\begin{aligned}
+\langle v_i^{(t)}, \mathbf{M}_{1j} \rangle
+&=
+\frac{(1+a_t)^t - (1-a_t)^t}{2}\,
+\langle w_i^{(0)}, \mathbf{M}_{1j} \rangle
++
+\frac{(1+a_t)^t + (1-a_t)^t}{2}\,
+\langle v_i^{(0)}, \mathbf{M}_{1j} \rangle \\[6pt]
+&=
+\big(1+\Theta(\tfrac{\eta}{d})\big)^{t}
+\cdot
+\frac{
+\langle w_i^{(0)}, \mathbf{M}_{1j} \rangle
++
+\langle v_i^{(0)}, \mathbf{M}_{1j} \rangle
+}{2} \\[6pt]
+&\ge
+\color{red}{\mathrm{TBD\_v}} .
+\end{aligned}
+\end{equation}
+
+\(\langle w_i^{(0)}, \mathbf{M}_{1j} \rangle ^{2} 
+\;\ge\;
+\frac{(c_1 + c_2)\,\log d}{d}\,
+\| \mathbf{M}_1 \mathbf{M}_1^{\top} w_i^{(0)} \|_2^{2}.\)
+
+
+\begin{equation}
+\langle v_i^{(T_1)}, \mathbf{M}_{1j} \rangle
+\;\ge\;
+(1 - o(1))\, \| v_i^{(T_1)} \|_2 .
+\end{equation}
+
+
+
+The bias dynamics admit a parallel closed-form expansion, following the same structure as the weight updates:
+\begin{equation}
+\label{eq:bias-dynamics-stage1}
+\begin{aligned}
+b_i^{(t+1)}
+&=
+b_i^{(t)}
++
+\eta_b\, \| v_i^{(t)} \|_2^2 \,
+\langle w_i^{(t)}, x_\tau \rangle\,
+\mathbf{1}\{ w_i^{(t)\top} x_\tau \ge b_i^{(t)} \}
+\\[6pt]
+&=
+b_i^{(t)}
++
+\eta_b\,\|v_i^{(t)}\|_2^{2}\,
+\langle w_i^{(t)}, \tau\epsilon \rangle\,
+\mathcal{I}^{(t)}_{\epsilon}
+\\[6pt]
+&=
+b_i^{(t)}
+\Big(
+1 + \Theta(\eta_b\,\mathrm{Pr}_{1j}^{\epsilon})
+\Big).
+\end{aligned}
+\end{equation}
+
+where
+\(\mathrm{Pr}_{1j}^{\epsilon}
+=
+\mathbf{1}\!\left\{
+\langle w_i^{(t)}, \tau\epsilon\rangle
+\ge
+b_i^{(t)}
+\right\}= \Theta(TBD) \)
+
+
+Using Eq.~\ref{eq:wi-dynamics-M1j} and Eq.~\ref{eq:bias-dynamics-stage1}, 
+the alignment term 
+\(\langle w_i^{(T_1)}, \mathbf{M}_{1j} \rangle\) 
+grows at an exponential rate 
+\((1+\Theta(\eta/d))^{T_1}\),
+while the bias \(b_i^{(t)}\) increases only through the 
+noise–driven Stage~I update 
+\(b_i^{(t+1)} = b_i^{(t)}\big(1+\Theta(\eta_b\,\mathrm{Pr}_{1j,\epsilon}^{(t)})\big)\).
+Consequently, throughout all iterations \(t \le T_1\),
+\(
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle \;>\; b_i^{(t)}
+\)
+holds with high probability.
+This ensures that the activation condition 
+\(\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}\)
+remains consistently triggered for all 
+\(i \in S_{1j,\mathrm{sure}}\) when \( |z_{1j}| = 1 \) during Stage~I.
+
+
+
+
+
+
+
+\subsection{Alignment for \( i \notin S_{1j,\mathrm{sure}} \)}
+
+This section examines the alignment behavior of neurons \(i \notin S_{1j,\mathrm{sure}}\).  
+For such neurons, the projection 
+\(\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle\) remains small throughout the early stage 
+\(t \le T_1\), exhibiting only weak and sub-exponential growth.  
+The signal along the \(\mathbf{M}_1\) directions is insufficient to reinforce these neurons, and 
+the stochastic fluctuations introduced by the diffusion noise dominate their update dynamics,
+preventing any single feature direction from becoming dominant.
+
+
+
+For neurons \( i \notin S_{1j,\mathrm{sure}} \), the initial alignment 
+\(\langle w_i^{(0)}, \mathbf{M}_{1j} \rangle\) is too small to trigger the 
+gating condition with high probability.  
+In this case the diffusion noise dominates, and the gating event satisfies
+\(
+\Pr\!\left( w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \right) \le c_0, 0 < c_0 < 1.
+\)
+
+Consequently, the effective learning rate along the \(\mathbf{M}_{1j}\) direction is 
+suppressed by a factor \(c_0\), and the weight update becomes
+\begin{equation}
+\begin{aligned}
+\langle w_i^{(t+1)}, \mathbf{M}_{1j} \rangle
+&=
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle
++
+\eta\,
+\langle v_i^{(t)}, \mathbf{M}_{1j} \rangle
+z_{1j}\,
+\mathbf{1}\{ w_i^{(t)\top}x_{\tau} \ge b_i^{(t)} \}
+\pm Err_t
+\\[4pt]
+&=
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle
++
+\Theta\!\left(\frac{\eta}{d c_0}\right)
+\langle v_i^{(t)}, \mathbf{M}_{1j} \rangle
+\pm Err_t .
+\end{aligned}
+\end{equation}
+
+Similarly,
+\begin{equation}
+\begin{aligned}
+\langle v_i^{(t+1)}, \mathbf{M}_{1j} \rangle
+&=
+\langle v_i^{(t)}, \mathbf{M}_{1j} \rangle
++
+\Theta\!\left(\frac{\eta}{d c_0}\right)
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle
+\pm Err_t .
+\end{aligned}
+\end{equation}
+
+Iterating the coupled dynamics yields
+\begin{equation}
+\label{eq:wi-dynamics-M1j'}
+\begin{aligned}
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle
+&=
+\frac{(1+a_t)^t + (1-a_t)^t}{2}
+\langle w_i^{(0)}, \mathbf{M}_{1j} \rangle
++
+\frac{(1+a_t)^t - (1-a_t)^t}{2}
+\langle v_i^{(0)}, \mathbf{M}_{1j} \rangle
+\\[6pt]
+&=
+\big(1+\Theta(\tfrac{\eta}{d c_0})\big)^t
+\cdot
+\frac{
+\langle w_i^{(0)}, \mathbf{M}_{1j} \rangle
++
+\langle v_i^{(0)}, \mathbf{M}_{1j} \rangle
+}{2}
+\\[6pt]
+&\le
+\color{red}{\text{TBD: plug in $T_1$ and initial}} ,
+\end{aligned}
+\end{equation}
+where \( a_t = \Theta(\eta/(d c_0)) \).
+
+Because \(c_0 < 1\), the growth factor 
+\((1+\Theta(\eta/(d c_0)))^{t}\) is strictly weaker than the exponential
+growth observed for neurons in \(S_{1j,\mathrm{sure}}\).  
+Thus \(\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle\) remains small and cannot dominate any
+feature direction during Stage~I.
+
+
+Using 
+\(
+\langle w_i^{(0)}, \mathbf{M}_{1j} \rangle^{2} 
+\le
+\frac{\log d}{d}\,
+\| \mathbf{M}_1 \mathbf{M}_1^{\top} w_i^{(0)} \|_2^{2}
+\),
+we obtain
+\begin{equation}
+\langle w_i^{(T_1)}, \mathbf{M}_{1j} \rangle
+\;\le\;
+\Big( \frac{1}{d^{\,1-c_0}} \Big)
+\| w_i^{(T_1)} \|_2 .
+\end{equation}
+
+By symmetry of the coupled update dynamics for 
+\( (w_i^{(t)}, v_i^{(t)}) \),
+an identical bound holds for the dual component:
+\begin{equation}
+\langle v_i^{(T_1)}, \mathbf{M}_{1j} \rangle
+\;\le\;
+\Big( \frac{1}{d^{\,1-c_0}} \Big)
+\| v_i^{(T_1)} \|_2 .
+\end{equation}
+
+
+
+
+
+
+
+
+
+
+\section{Stage II: \(\mathbf{M}_{2}\) 
+Phase}
+
+In the second stage of training, where \(\tau_{\min} < \tau < \tau_1\) and  
+\(\mathbf{x}_{\tau} = \mathbf{x}_0 + \tau \epsilon\),  
+the diffusion model begins to align its parameters with the high–frequency dictionary 
+\(\mathbf{M}_{2}\).  
+Since the components along \(\mathbf{M}_{1}\) have already been reinforced during Stage~I,  
+their magnitudes remain essentially stable in this regime, exhibiting only negligible drift 
+relative to their \(T_1\)-scale values.
+
+Let \(T_2\) denote the duration of this stage.  
+Throughout Stage~II, the projections of \(w_i^{(t)}\) and \(v_i^{(t)}\) onto the 
+\(\mathbf{M}_{2}\) directions grow monotonically, driven by the increasing signal–to–noise 
+ratio along the \(\mathbf{M}_{2}\) coordinates.  
+Meanwhile, the components along \(\mathbf{M}_{1}\) remain close to their Stage~I values,  
+as the diffusion noise in this range no longer provides a sufficiently coherent gradient 
+to alter the previously established \(\mathbf{M}_{1}\) alignment.
+
+
+
+\subsection{Alignment Growth for Neurons in \(S_{2j,\mathrm{sure}}\)}
+
+This section examines the alignment behavior of neurons \(i \in S_{2j,\mathrm{sure}}\).  
+For each \(j \in [d]\), when \(i \in S_{2j,\mathrm{sure}}\), the projection  
+\(\langle w_i^{(t)}, \mathbf{M}_{2j} \rangle\) grows slowly at first and then increases 
+exponentially once it surpasses the bias threshold during Stage~II.  
+This growth is triggered by the emerging dominant signal along the \(\mathbf{M}_2\) directions.
+
+
+
+grows slowly at first:
+The weight dynamics for \(|\langle w_i^{(t+1)}, \mathbf{M}_{2j} \rangle|\) and \(|\langle v_i^{(t+1)}, \mathbf{M}_{2j} \rangle|\) can be expressed as:
+
+\begin{equation}
+\begin{aligned}
+\langle w_i^{(t+1)}, \mathbf{M}_{2j} \rangle
+&=
+\langle w_i^{(t)}, \mathbf{M}_{2j} \rangle
++
+\eta\, 
+\langle v_i^{(t)}, x_{0} - g^{(t)}(x_{\tau}) \rangle
+\, \langle x_{\tau}, \mathbf{M}_{2j} \rangle\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+\\[4pt]
+&=
+\langle w_i^{(t)}, \mathbf{M}_{2j} \rangle
++
+\eta\,
+\langle v_i^{(t)}, \mathbf{M}_{2j} \rangle\, 
+z_{2j}\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+\;\pm Err_t
+\\[4pt]
+&=
+\langle w_i^{(t)}, \mathbf{M}_{2j} \rangle
++
+\Theta\!\left( \frac{\alpha_2^2 \eta}{d c_1} \right)
+\langle v_i^{(t)}, \mathbf{M}_{2j} \rangle
+\;\pm Err_t .
+\end{aligned}
+\end{equation}
+
+where \(c_1\) denote the probability that the gating event can be activated by 
+a feature direction in \(\mathbf{M}_{1}\).  
+Formally,
+\( 
+c_1
+=
+\frac{1}{d}
+\sum_{j=1}^{d}
+\Pr\!\left(
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+=1
+\;\big|\;
+|z_{1j}| = 1
+\right),  0 < c_1 \le 1.
+\)
+
+Once the projection satisfies \(\langle w_i^{(t)}, \mathbf{M}_{2j} \rangle \ge b_i^{(t)}\), the dynamics change. By the definition of \(S_{2j,\mathrm{sure}}\), the coordinate \(\mathbf{M}_{2j}\) is the first direction whose alignment crosses the bias threshold, while every \(\mathbf{M}_{2j'}\) with \(j'\neq j\) remains below \(b_i^{(t)}\). Applying Lemma~\ref{lemma:gaussian-two-regime}, with high probability,
+\begin{equation}
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}=1.
+\end{equation}
+Consequently,
+\begin{equation}
+\mathbb{E}\!\left[
+z_{2j}\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+\right]
+=
+\Theta\!\left(\frac{1}{d}\right).
+\end{equation}
+
+
+
+Thus, after the threshold is crossed, the indicator remains active with high probability, and the neuron enters the exponential-growth regime:
+\begin{equation}
+\begin{aligned}
+\langle w_i^{(t+1)}, \mathbf{M}_{2j} \rangle
+&=
+\langle w_i^{(t)}, \mathbf{M}_{2j} \rangle
++
+\Theta\!\left(\frac{\alpha_2^2\eta}{d}\right)
+\langle v_i^{(t)}, \mathbf{M}_{2j} \rangle
+\pm Err_t , \\[4pt]
+\langle v_i^{(t+1)}, \mathbf{M}_{2j} \rangle
+&=
+\langle v_i^{(t)}, \mathbf{M}_{2j} \rangle
++
+\Theta\!\left(\frac{\alpha_2^2\eta}{d}\right)
+\langle w_i^{(t)}, \mathbf{M}_{2j} \rangle
+\pm Err_t .
+\end{aligned}
+\end{equation}
+Because the indicator is active on a \(1-\delta\) fraction of steps, the recursion becomes a linear system with positive feedback, yielding the exponential factor \(\big(1+\Theta(\alpha_2^2\eta/d)\big)^t\) in \eqref{eq:wi-dynamics-M2j}--\eqref{eq:vi-dynamics-M2j}.
+
+
+\begin{equation}
+\label{eq:wi-dynamics-M2j}
+\begin{aligned}
+\langle w_i^{(t)}, \mathbf{M}_{2j} \rangle
+&=
+\frac{(1+\tilde a_t)^t + (1-\tilde a_t)^t}{2}\,
+\langle w_i^{(0)}, \mathbf{M}_{2j} \rangle
++
+\frac{(1+\tilde a_t)^t - (1-\tilde a_t)^t}{2}\,
+\langle v_i^{(0)}, \mathbf{M}_{2j} \rangle \\[6pt]
+&=
+\big(1 + \Theta(\tfrac{\alpha_2^2 \eta}{d})\big)^{t}\,
+\frac{
+\langle w_i^{(0)}, \mathbf{M}_{2j} \rangle
++
+\langle v_i^{(0)}, \mathbf{M}_{2j} \rangle
+}{2} \\[6pt]
+&\ge \color{red}{\mathrm{TBD\_M2}(T_2,\text{init})}.
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+\label{eq:vi-dynamics-M2j}
+\begin{aligned}
+\langle v_i^{(t)}, \mathbf{M}_{2j} \rangle
+&=
+\frac{(1+\tilde a_t)^t - (1-\tilde a_t)^t}{2}\,
+\langle w_i^{(0)}, \mathbf{M}_{2j} \rangle
++
+\frac{(1+\tilde a_t)^t + (1-\tilde a_t)^t}{2}\,
+\langle v_i^{(0)}, \mathbf{M}_{2j} \rangle \\[6pt]
+&=
+\big(1 + \Theta(\tfrac{\alpha_2^2 \eta}{d})\big)^{t}\,
+\frac{
+\langle w_i^{(0)}, \mathbf{M}_{2j} \rangle
++
+\langle v_i^{(0)}, \mathbf{M}_{2j} \rangle
+}{2} \\[6pt]
+&\ge \color{red}{\mathrm{TBD\_v,M2}(T_2,\text{init})}.
+\end{aligned}
+\end{equation}
+
+
+
+\subsection{Alignment \(\mathbf{M}_{2}\) for \( i \notin S_{2j,\mathrm{sure}} \)}
+We now analyze neurons \( i \notin S_{2j,\mathrm{sure}} \).
+Their updates along \( \mathbf{M}_{2j} \) follow the same slow-increase recurrence as the sure-set neurons at the beginning of Stage~II.  
+However, unlike \( i \in S_{2j,\mathrm{sure}} \), their projection never exceeds the bias level \( b_i^{(t)} \).  
+Thus the indicator becomes inactive once the bias grows, and the amplification term disappears.  
+From this point on, the updates are dominated by noise drift, causing the alignment to decay back to the \(O(1/\sqrt d)\).
+
+For any \(i \notin S_{2j,\mathrm{sure}}\), the projection dynamics satisfy the same initial recurrence as in the sure-set case:
+\begin{equation}
+\label{eq:non-sure-M2-initial}
+\begin{aligned}
+\langle w_i^{(t+1)}, \mathbf{M}_{2j'} \rangle
+&=
+\langle w_i^{(t)}, \mathbf{M}_{2j'} \rangle
++
+\eta\, 
+\langle v_i^{(t)}, x_{0} - g^{(t)}(x_{\tau}) \rangle
+\,
+\langle x_{\tau}, \mathbf{M}_{2j'} \rangle
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+\;\pm Err_t
+\\[4pt]
+&=
+\langle w_i^{(t)}, \mathbf{M}_{2j'} \rangle
++
+\eta\,
+\langle v_i^{(t)}, \mathbf{M}_{2j'} \rangle
+z_{2j'}
+\,\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+\;\pm Err_t
+\\[4pt]
+&=
+\langle w_i^{(t)}, \mathbf{M}_{2j'} \rangle
++
+\Theta\!\left(\frac{\alpha_2^{2}\eta}{d c_1}\right)
+\langle v_i^{(t)}, \mathbf{M}_{2j'} \rangle
+\;\pm Err_t .
+\end{aligned}
+\end{equation}
+
+
+\begin{equation}
+\label{eq:non-sure-M2-growth-jprime}
+\begin{aligned}
+\langle w_i^{(t)}, \mathbf{M}_{2j'} \rangle
+&=
+\big(1 + \Theta(\tfrac{\alpha_2^2 \eta}{dc_1})\big)^{t}\,
+\frac{
+\langle w_i^{(0)}, \mathbf{M}_{2j'} \rangle
++
+\langle v_i^{(0)}, \mathbf{M}_{2j'} \rangle
+}{2}
+\\[6pt]
+&\le \color{red}{\mathrm{TBD\_M2}(T_2,\text{init})}.
+\end{aligned}
+\end{equation}
+
+When $i \notin S_{2j,\mathrm{sure}}$, even though the target direction 
+$\langle w_i^{(t)}, \mathbf{M}_{2j} \rangle$ eventually exceeds $b_i^{(t)}$, 
+the non-target projection always satisfies 
+$\langle w_i^{(t)}, \mathbf{M}_{2j'} \rangle < b_i^{(t)}$ for all $t \le T_2$. 
+Applying Lemma~\ref{lemma:gaussian-two-regime}, the gating condition along  
+$\mathbf{M}_{2j'}$ then satisfies, with high probability \(1-\exp\!\left(
+-\frac{\Delta_2^2}{2\tau}
+\right)\),
+\begin{equation}
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \} = 0 .
+\end{equation}
+Consequently,
+\begin{equation}
+\mathbb{E}\!\left[
+z_{2j'}\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+\right]
+\le
+O\!\left(\frac{1}{d^{2}}\right).
+\end{equation}
+This shows that $\mathbf{M}_{2j'}$ component cannot trigger the indicator. 
+Thus the alignment along $\mathbf{M}_{2j'}$ receives no amplification and remains below the bias level throughout Stage~II.
+
+
+Once neurons in $S_{2j,\mathrm{sure}}$ begin exponential growth along $\mathbf{M}_{2j}$,
+the projections onto all non-target high-frequency atoms $\mathbf{M}_{2j'}$ with $j' \neq j$
+become progressively weaker.  
+Whenever $z_{2j'}=0$ and the indicator is active, the update on the non-target component
+satisfies
+\begin{equation}
+\label{eq:decay-M2jp}
+\langle w_i^{(t+1)}, \mathbf{M}_{2j'} \rangle
+\le
+\langle w_i^{(t)}, \mathbf{M}_{2j'} \rangle
+-
+\eta\,\|v_i^{(t)}\|_{2}^{2}\,
+\langle w_i^{(t)}, x_{\tau} \rangle\,
+\langle x_{\tau}, \mathbf{M}_{2j'} \rangle .
+\end{equation}
+
+In contrast, if $z_{2j'}=1$ and the indicator is active, the update satisfies
+\begin{equation}
+\label{eq:increase-M2jp}
+\begin{aligned}
+\langle w_i^{(t+1)}, \mathbf{M}_{2j'} \rangle
+&=
+\langle w_i^{(t)}, \mathbf{M}_{2j'} \rangle
++
+\eta\,\langle v_i^{(t)}, \mathbf{M}_{2j'} \rangle
+z_{2j'}
+\;\pm Err_t
+\\[4pt]
+&=
+\langle w_i^{(t)}, \mathbf{M}_{2j'} \rangle
++
+\Theta\!\left( \frac{\alpha_2^{2}\eta}{d\,c_1} \right)
+\langle v_i^{(t)}, \mathbf{M}_{2j'} \rangle
+\;\pm Err_t .
+\end{aligned}
+\end{equation}
+
+Using Lemma~\ref{lemma:indicator-threshold} and Lemma~\ref{lemma:conditional-Xi-lower-bound},
+when
+\[
+t=\Theta\!\left(
+\frac{b_i^{2}}{\|w_i\|_{2}^{2}\,\log d}
+\right),
+\]
+the negative update in \eqref{eq:decay-M2jp} dominates the positive update
+in \eqref{eq:increase-M2jp}.  
+Thus, over the Stage~II time horizon $t \le T_2$, the squared projection satisfies
+\begin{equation}
+\label{eq:M2jp-decay-square}
+\begin{aligned}
+\langle w_i^{(T_2)}, \mathbf{M}_{2j'} \rangle^{2}
+&\le
+\eta^{2}\,\|v_i\|_{2}^{2}\,
+\|\mathbf{M}_{2j'}\|_{2}^{2}\,
+\|x_{\tau}\|_{2}^{2}
+\\[6pt]
+&\le
+O\!\left(\frac{\|w_i^{(T_2)}\|_{2}^{2}}{d}\right).
+\end{aligned}
+\end{equation}
+Hence the alignment with any non-target $\mathbf{M}_{2j'}$ direction 
+strictly decays and remains asymptotically negligible 
+compared to the dominant $\mathbf{M}_{2j}$ component.
+
+
+
+
+
+
+\subsection{Alignment Decay for \(\mathbf{M}_{1}\) in \(S_{2j,\mathrm{sure}}\)}
+
+For neurons \(i \in S_{2j,\mathrm{sure}}\), once the projection 
+\(\langle w_i^{(t)}, \mathbf{M}_{2j} \rangle\) exceeds the bias threshold in Stage~II,  
+the neuron begins to specialize toward the \(\mathbf{M}_{2j}\) feature.  
+As a consequence, the projections onto all \(\mathbf{M}_1\) directions become 
+progressively weaker.  
+The update dynamics suppress the residual \(\mathbf{M}_1\) components, causing  
+\(\langle w_i^{(t)}, \mathbf{M}_{1j'} \rangle\) to decay steadily throughout the 
+exponential growth of the dominant \(\mathbf{M}_2\) component.
+
+
+Under this event, the component \(\langle w_i^{(t)}, \mathbf{M}_{1j'} \rangle\) decays whenever 
+\(z_{1j'} = 0\) and \(\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}=1\).  
+In this case
+\begin{equation}
+\label{eq:decay-M1jp}
+\langle w_i^{(t+1)}, \mathbf{M}_{1j'} \rangle 
+\le 
+\langle w_i^{(t)}, \mathbf{M}_{1j'} \rangle
+-
+\eta\,\|v_i^{(t)}\|_{2}^{2}\,
+\langle w_i^{(t)}, x_{\tau} \rangle\,
+\langle x_{\tau}, \mathbf{M}_{1j'} \rangle\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}.
+\end{equation}
+
+In contrast, when \(z_{1j'} = 1\) and the indicator is active, 
+the component \(\langle w_i^{(t)}, \mathbf{M}_{1j'} \rangle\) increases:
+\begin{equation}
+\label{eq:increase-M1jp}
+\begin{aligned}
+\langle w_i^{(t+1)}, \mathbf{M}_{1j'} \rangle
+&=
+\langle w_i^{(t)}, \mathbf{M}_{1j'} \rangle
++
+\eta\,\langle v_i^{(t)}, x_{0} - g^{(t)}(x_{\tau}) \rangle\,
+\langle x_{\tau}, \mathbf{M}_{1j'} \rangle\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+\\[4pt]
+&=
+\langle w_i^{(t)}, \mathbf{M}_{1j'} \rangle
++
+\eta\,\langle v_i^{(t)}, \mathbf{M}_{1j'} \rangle\,z_{1j'}\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+\;\pm Err_t
+\\[4pt]
+&=
+\langle w_i^{(t)}, \mathbf{M}_{1j'} \rangle
++
+\Theta\!\left( \frac{\eta}{d\,c_1} \right)
+\langle v_i^{(t)}, \mathbf{M}_{1j'} \rangle
+\;\pm Err_t .
+\end{aligned}
+\end{equation}
+
+
+
+
+To guarantee that the decay update in \eqref{eq:decay-M1jp} dominates the positive update
+in \eqref{eq:increase-M1jp}, we use Lemma~\ref{lemma:indicator-threshold} and Lemma~\ref{lemma:conditional-Xi-lower-bound}.  
+when
+\( t=\Theta\!\left(
+\frac{b_i^{2}}
+{\|w_i\|_{2}^{2}\,\log d}
+\right) \), it suffices to ensure that the expected contribution from  
+\(\langle w_i^{(t)}, x_{\tau} \rangle \langle x_{\tau}, \mathbf{M}_{1j'} \rangle\)  
+under the active-gating event is lower bounded:
+\begin{equation}
+\mathbb{E}\!\left[
+\langle w_i^{(t)}, x_{\tau} \rangle\,
+\langle x_{\tau}, \mathbf{M}_{1j'} \rangle\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+\right]
+\;\ge\;
+\Omega\!\left(\frac{1}{d}\right).
+\end{equation}
+so \(\langle w_i^{(t)}, \mathbf{M}_{1j'} \rangle\) decay in \eqref{eq:decay-M1jp},
+
+
+
+
+
+Using \eqref{eq:decay-M1jp}, over the Stage~II time horizon \(t \le T_2\), squaring and accumulating the above recursion yields
+\begin{equation}
+\label{eq:M1-decay-square}
+\begin{aligned}
+\langle w_i^{(T_2)}, \mathbf{M}_{1j'} \rangle^{2}
+&\le
+\eta^2 \,\|v_i\|_{2}^{2}\,
+\|\mathbf{M}_{1j'}\|_{2}^{2}\,
+\|x_{\tau}\|_{2}^{2}
+\\[6pt]
+&\le
+O\!\left(\frac{\|w_i^{(T_2)}\|_{2}^{2}}{d}\right),
+\end{aligned}
+\end{equation}
+
+
+
+
+
+
+
+\subsection{Alignment Negligible Decay for \(\mathbf{M}_{1}\) in \(S_{1j,\mathrm{sure}}\)}
+
+For neurons \(i \in S_{1j,\mathrm{sure}}\), the strong Stage~I alignment with
+\(\mathbf{M}_{1j}\) remains essentially unchanged during Stage~II.  
+Since 
+\(\langle w_i^{(t)}, \mathbf{M}_{2k} \rangle < b_i^{(t)}\) for all \(k\),
+no \(\mathbf{M}_{2}\) direction can activate the indicator.  
+The bias \(b_i^{(t)}\) also exceeds all \(\mathbf{M}_{1j'}\) responses except the target
+\(j\), so the indicator is almost always zero.  
+Thus both positive and negative updates along \(\mathbf{M}_{1j'}\) are suppressed, and the
+alignment with the \(\mathbf{M}_{1}\) dictionary exhibits only negligible drift in Stage~II.
+
+First, the residual projection on any non-target atom satisfies
+\begin{equation}
+\langle x_{\tau}-g(x_{\tau}), \mathbf{M}_{1j'} \rangle
+    \le O\!\left(\tfrac{1}{d}\right).
+\end{equation}
+Consequently,
+\begin{equation}
+\mathbb{E}\!\left[
+\langle v_i^{(t)}, x_{\tau}-g(x_{\tau}) \rangle\, z_{1j'}\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+\right]
+    \le O\!\left(\tfrac{1}{d^{2}}\right).
+\end{equation}
+
+When \(z_{1j} = 1\), the update along \(\mathbf{M}_{1j}\) has the same
+initial slow-increase form:
+\begin{equation}
+\label{eq:increase-M1j}
+\begin{aligned}
+\langle w_i^{(t+1)}, \mathbf{M}_{1j} \rangle
+&=
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle
++
+\eta\, 
+\langle v_i^{(t)}, x_{0}-g^{(t)}(x_{\tau}) \rangle\,
+\langle x_{\tau}, \mathbf{M}_{1j} \rangle\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+\\[4pt]
+&=
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle
++
+\eta\, 
+\langle v_i^{(t)}, \mathbf{M}_{1j} \rangle\,
+z_{1j}\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+\;\pm Err_t
+\\[4pt]
+&=
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle
++
+\Theta\!\left(\frac{\eta}{d\,c_1}\right)
+\langle v_i^{(t)}, \mathbf{M}_{1j} \rangle
+\;\pm Err_t .
+\end{aligned}
+\end{equation}
+
+
+
+
+Next, under \(z_{1j'}=0\),
+\(\langle w_i^{(t)}, x_{\tau} \rangle\) is distributed as
+\begin{equation}
+\langle w_i^{(t)}, x_{\tau} \rangle
+    \sim \mathcal N\!\big(0,\,\tau\|w_i^{(t)}\|_{2}^{2}\big).
+\end{equation}
+When \(\tau = O(1/d)\), Lemma~\ref{lemma:gaussian-two-regime} yields
+\begin{equation}
+\Pr\!\left(
+\langle w_i^{(t)}, x_{\tau} \rangle \ge b_i^{(t)}
+\;\big|\;
+z_{1j'} = 0
+\right)
+    \le O\!\left(\tfrac{1}{d^2}\right).
+\end{equation}
+
+
+
+
+
+
+
+
+Therefore,  the dominant
+\(\mathbf{M}_{1j}\) alignment produced in Stage~I is preserved throughout Stage~II.
+
+
+
+
+
+
+
+
+\section{Convergence of the Diffusion Training Dynamics}
+\label{sec:dm-convergence}
+
+\subsection{Indicator Stability and Near-Perfect Alignment}
+
+Fix a feature index \(j \in [d]\).  
+For any neuron \(i \in S_{1j,\mathrm{sure}}\), the Stage I analysis implies that the weights almost perfectly align with the low-frequency atom \(\mathbf{M}_{1j}\):
+\begin{equation}
+\label{eq:stage1-alignment-sure-correct}
+\frac{\langle w_i^{(T_1)}, \mathbf{M}_{1j} \rangle}{\|w_i^{(T_1)}\|_2} = 1 - o(1),
+\qquad
+\frac{\langle v_i^{(T_1)}, \mathbf{M}_{1j} \rangle}{\|v_i^{(T_1)}\|_2} = 1 - o(1).
+\end{equation}
+Moreover, for all \(k \neq j\),
+\begin{equation}
+\label{eq:stage1-off-support-correct}
+\frac{|\langle w_i^{(T_1)}, \mathbf{M}_{1k} \rangle|}{\|w_i^{(T_1)}\|_2} \le o(1),
+\qquad
+\frac{|\langle v_i^{(T_1)}, \mathbf{M}_{1k} \rangle|}{\|v_i^{(T_1)}\|_2} \le o(1).
+\end{equation}
+
+Because the bias \(b_i^{(t)}\) grows sublinearly compared to the directional margin 
+\(\langle w_i^{(t)}, x_{\tau}\rangle\),
+the gating condition satisfies
+\begin{equation}
+\label{eq:indicator-always-on-stage1}
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \} = 1,
+\qquad
+\forall t \in [T_1, T_2]
+\end{equation}
+whenever the sample contains the true feature \(z_{1j} = 1\).
+
+Similarly, for any neuron \(i \in S_{2j,\mathrm{sure}}\), the Stage II dynamics ensure that the dominant component is the high-frequency feature \(\mathbf{M}_{2j}\):
+\begin{equation}
+\label{eq:stage2-alignment-sure-correct}
+\frac{\langle w_i^{(T_2)}, \mathbf{M}_{2j} \rangle}{\|w_i^{(T_2)}\|_2} = 1 - o(1),
+\qquad
+\frac{\langle v_i^{(T_2)}, \mathbf{M}_{2j} \rangle}{\|v_i^{(T_2)}\|_2} = 1 - o(1).
+\end{equation}
+All off-support coefficients remain at most \(O(1/\sqrt d)\).  
+Thus, when the data sample contains the high-frequency feature \(z_{2j}=1\),
+\begin{equation}
+\label{eq:indicator-always-on-stage2}
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \} = 1,
+\qquad
+\forall t \ge T_2.
+\end{equation}
+
+Equations \eqref{eq:indicator-always-on-stage1}--\eqref{eq:indicator-always-on-stage2}
+show that for sure-set neurons the ReLU never changes its activation state.
+Therefore the mapping \((w_i,v_i)\mapsto g(x_{\tau})\) becomes linear, and the diffusion loss reduces to a quadratic function of \((w_i,v_i)\).  
+This yields a convex and \(L\)-smooth objective for each neuron.
+
+\subsection{Identification of the Optimal Aligned Solution}
+
+\paragraph{Stage I: learning the low-frequency atom.}
+
+Since \(\alpha_1=\Theta(1)\) and \(\alpha_2 = \Theta(1/d^{c_0})\), the effective target in Stage I is
+\(\alpha_1 z_{1j} \mathbf{M}_{1j}\).
+Under the fixed indicator \eqref{eq:indicator-always-on-stage1}, the restricted loss over neuron \(i\in S_{1j,\mathrm{sure}}\) is
+\begin{equation}
+L_{\mathrm{DM},1j}(w_i,v_i)
+=
+\mathbb{E}
+\Big[
+\tfrac12 \|
+v_i^{\top}(w_i^{\top}x_{\tau}-b_i)
+-
+\alpha_1 z_{1j} \mathbf{M}_{1j}
+\|_2^2
+\Big].
+\end{equation}
+Because \(x_{\tau}\) lies in the span of \(\mathbf{M}_1\) up to \(o(1)\) error, the minimizer is the rank-one solution
+\begin{equation}
+\label{eq:DM-opt-stage1-correct}
+w_i^{*} = \beta_{i,1j}^{*}\mathbf{M}_{1j},
+\qquad
+v_i^{*} = \gamma_{i,1j}^{*}\mathbf{M}_{1j},
+\end{equation}
+with coefficients depending on the moments of \(x_{\tau}\).
+
+\paragraph{Stage II: learning the high-frequency atom.}
+
+After Stage I, the low-frequency component has already been fitted by neurons in \(S_{1j,\mathrm{sure}}\).  
+The residual signal is the high-frequency component \(\alpha_2 z_{2j}\mathbf{M}_{2j}\).  
+For neurons \(i\in S_{2j,\mathrm{sure}}\), the restricted quadratic loss becomes
+\begin{equation}
+L_{\mathrm{DM},2j}(w_i,v_i)
+=
+\mathbb{E}
+\Big[
+\tfrac12 \|
+v_i^{\top}(w_i^{\top}x_{\tau}-b_i)
+-
+\alpha_2 z_{2j} \mathbf{M}_{2j}
+\|_2^2
+\Big].
+\end{equation}
+Indicator stability \eqref{eq:indicator-always-on-stage2} again makes the loss quadratic.  
+Because the high-frequency feature dominates the residual, the unique minimizer aligns purely with \(\mathbf{M}_{2j}\):
+\begin{equation}
+\label{eq:DM-opt-stage2-correct}
+w_i^{*} = \beta_{i,2j}^{*}\mathbf{M}_{2j},
+\qquad
+v_i^{*} = \gamma_{i,2j}^{*}\mathbf{M}_{2j}.
+\end{equation}
+
+\subsection{Smoothness and Gradient Descent Convergence}
+
+For all sure-set neurons, the restricted losses \(L_{\mathrm{DM},1j}\) and \(L_{\mathrm{DM},2j}\) are quadratic once the indicator is fixed.  
+Using the bounds \(\|x_{\tau}\|_2 = O(1)\) and \(\|w_i^{(t)}\|_2 = \|v_i^{(t)}\|_2 = \Theta(1)\), the smoothness constant satisfies
+\begin{equation}
+l_i = O(\|v_i^{(t)}\|_2^2 \|x_{\tau}\|_2^2 + \|w_i^{(t)}\|_2^2  \|x_{\tau}\|_2^2) = \Theta(1).
+\end{equation}
+Let \(L = \max_i l_i = \Theta(1)\).  
+The update rules
+\begin{equation}
+w_i^{(t+1)} = w_i^{(t)} - \eta \nabla_{w_i} L_{\mathrm{DM},j}^{(t)},
+\qquad
+v_i^{(t+1)} = v_i^{(t)} - \eta \nabla_{v_i} L_{\mathrm{DM},j}^{(t)}
+\end{equation}
+with \(\eta=1/L\) give, by smoothness,
+\begin{equation}
+\label{eq:dm-one-step-decrease-final}
+L_{\mathrm{DM},j}(w_i^{(t+1)}, v_i^{(t+1)})
+\le
+L_{\mathrm{DM},j}(w_i^{(t)}, v_i^{(t)})
+-
+\tfrac{\eta}{2}
+\|\nabla L_{\mathrm{DM},j}(w_i^{(t)}, v_i^{(t)})\|_2^{2}.
+\end{equation}
+
+By standard smooth-convexity,
+\begin{equation}
+\label{eq:dm-gradient-lower-bound-final}
+\|\nabla L_{\mathrm{DM},j}(w_i^{(t)}, v_i^{(t)})\|_2^2
+\ge
+\tfrac{2}{L}
+\big(L_{\mathrm{DM},j}(w_i^{(t)}, v_i^{(t)}) - L_{\mathrm{DM},j}(w_i^{*}, v_i^{*})\big).
+\end{equation}
+
+Averaging \eqref{eq:dm-one-step-decrease-final} over \(t=0,\dots,T_{\mathrm{DM}}-1\)
+and substituting \eqref{eq:dm-gradient-lower-bound-final} gives the telescope bound
+\begin{equation}
+\frac{1}{T_{\mathrm{DM}}}
+\sum_{t=0}^{T_{\mathrm{DM}}-1}
+L_{\mathrm{DM},j}(w_i^{(t)}, v_i^{(t)})
+\le
+L_{\mathrm{DM},j}(w_i^{*}, v_i^{*})
++
+\frac{L^{2}\Delta_0}{T_{\mathrm{DM}}},
+\end{equation}
+where \(\Delta_0 = L_{\mathrm{DM},j}(w_i^{(0)}, v_i^{(0)}) - L_{\mathrm{DM},j}(w_i^{*}, v_i^{*})\).
+
+Using \(T_{\mathrm{DM}} = \Theta(d)\), \(L=\Theta(1)\), and \(\|w_i^{(t)}\|_2=\Theta(1)\),
+\begin{equation}
+\frac{L^{2}\Delta_0}{T_{\mathrm{DM}}}
+= \Theta\Big(\frac{1}{d}\Big).
+\end{equation}
+Finally, from \eqref{eq:DM-opt-stage1-correct} and \eqref{eq:DM-opt-stage2-correct},
+\begin{equation}
+L_{\mathrm{DM},j}(w_i^{*}, v_i^{*}) = \Theta\Big(\frac{1}{d}\Big),
+\end{equation}
+since the dictionaries are orthonormal and the residual energy outside the aligned direction is \(O(1/d)\).
+
+Therefore, after \(T_{\mathrm{DM}}=\Theta(d)\) iterations,
+\begin{equation}
+L_{\mathrm{DM}}
+=
+\mathbb{E}_{x_0,\tau}\,\tfrac12\|g(x_{\tau}) - x_0\|_2^2
+\le
+\Theta\Big(\frac{1}{d}\Big),
+\end{equation}
+and every sure-set neuron converges to the aligned optimal solutions
+\eqref{eq:DM-opt-stage1-correct} and \eqref{eq:DM-opt-stage2-correct}.
+
+
+
+
+
+\section{Convergence of the Diffusion Training Dynamics}
+\label{sec:dm-convergence}
+
+In this section, we provide the convergence analysis for the diffusion model training. Building upon the alignment results from Stage I and Stage II, we show that the network parameters converge to a stationary point that corresponds to the optimal reconstruction of the clean signal structure.
+
+\subsection{Indicator Stability and Near-Perfect Alignment}
+
+We first establish that in the final training phase, the activation patterns of the neurons become stable. Fix a feature index \(j \in [d]\).
+
+For any neuron \(i \in S_{1j,\mathrm{sure}}\), the Stage I analysis implies that the weights aligned with the atom \(\mathbf{M}_{1j}\) satisfy:
+\begin{equation}
+\label{eq:stage1-alignment-sure-correct}
+\frac{\langle w_i^{(T_1)}, \mathbf{M}_{1j} \rangle}{\|w_i^{(T_1)}\|_2} = 1 - o(1),
+\qquad
+\frac{\langle v_i^{(T_1)}, \mathbf{M}_{1j} \rangle}{\|v_i^{(T_1)}\|_2} = 1 - o(1).
+\end{equation}
+Moreover, for all \(k \neq j\), the off-support projections are negligible:
+\begin{equation}
+\label{eq:stage1-off-support-correct}
+\frac{|\langle w_i^{(T_1)}, \mathbf{M}_{1k} \rangle|}{\|w_i^{(T_1)}\|_2} \le o(1),
+\qquad
+\frac{|\langle v_i^{(T_1)}, \mathbf{M}_{1k} \rangle|}{\|v_i^{(T_1)}\|_2} \le o(1).
+\end{equation}
+
+Recall that the input is given by \(x_{\tau} = x_0 + \tau \xi\), where \(\xi\) represents the diffusion noise. Although \(\xi\) is unbounded Gaussian noise, standard concentration inequalities (Lemma \ref{lemma:Noise Projection Bound}) imply that \(|\langle w_i, \xi \rangle|\) is bounded by \(O(\|w_i\|_2/\sqrt{d})\) with high probability.
+Since the bias \(b_i^{(t)}\) grows sublinearly compared to the signal margin \(\langle w_i^{(t)}, x_{\tau}\rangle\), the gating condition satisfies:
+\begin{equation}
+\label{eq:indicator-always-on-stage1}
+\Pr\left( \mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \} = 1 \right) \ge 1 - e^{-\Omega(d)},
+\qquad
+\forall t \in [T_1, T_2],
+\end{equation}
+whenever the sample contains the true feature \(z_{1j} = 1\).
+
+Similarly, for any neuron \(i \in S_{2j,\mathrm{sure}}\), the Stage II dynamics ensure that the dominant component is the feature \(\mathbf{M}_{2j}\). Specifically:
+\begin{equation}
+\label{eq:stage2-alignment-sure-correct}
+\frac{\langle w_i^{(T_2)}, \mathbf{M}_{2j} \rangle}{\|w_i^{(T_2)}\|_2} = 1 - o(1),
+\qquad
+\frac{\langle v_i^{(T_2)}, \mathbf{M}_{2j} \rangle}{\|v_i^{(T_2)}\|_2} = 1 - o(1).
+\end{equation}
+All off-support coefficients remain at most \(O(1/\sqrt d)\). Consequently, when the data sample contains the feature \(z_{2j}=1\), it holds with high probability that:
+\begin{equation}
+\label{eq:indicator-always-on-stage2}
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \} = 1,
+\qquad
+\forall t \ge T_2.
+\end{equation}
+
+Equations \eqref{eq:indicator-always-on-stage1} and \eqref{eq:indicator-always-on-stage2} show that for sure-set neurons, the ReLU activation state is frozen with high probability. Under this condition, the mapping \((w_i,v_i)\mapsto g(x_{\tau})\) behaves linearly, and the diffusion loss reduces to a locally quadratic function of \((w_i,v_i)\), ensuring convexity and smoothness.
+
+\subsection{Identification of the Optimal Aligned Solution}
+
+We analyze the convergence targets for Stage I and Stage II separately, reflecting the sequential learning nature of the diffusion process.
+
+\textbf{Stage I: Learning the \(\mathbf{M}_1\).}
+Since \(\alpha_1=\Theta(1)\) and \(\alpha_2 = \Theta(1/d^{c_0})\), the effective target in Stage I is dominated by \(\alpha_1 z_{1j} \mathbf{M}_{1j}\). Under the stable indicator \eqref{eq:indicator-always-on-stage1}, the restricted loss for neuron \(i\in S_{1j,\mathrm{sure}}\) is:
+\begin{equation}
+L_{\mathrm{DM},1j}(w_i,v_i)
+=
+\mathbb{E}
+\Big[
+\tfrac12 \|
+v_i^{\top}(w_i^{\top}x_{\tau}-b_i)
+-
+\alpha_1 z_{1j} \mathbf{M}_{1j}
+\|_2^2
+\Big].
+\end{equation}
+Because \(x_{\tau}\) lies in the subspace spanned by \(\mathbf{M}_1\) up to noise terms, the minimizer is the rank-one solution aligned with the dictionary atom:
+\begin{equation}
+\label{eq:DM-opt-stage1-correct}
+w_i^{*} = \beta_{i,1j}^{*}\mathbf{M}_{1j},
+\qquad
+v_i^{*} = \gamma_{i,1j}^{*}\mathbf{M}_{1j},
+\end{equation}
+where \(\beta_{i,1j}^{*}\) and \(\gamma_{i,1j}^{*}\) are scalar coefficients determined by the signal-to-noise ratio \(\alpha_1^2 / (\alpha_1^2 + \sigma_\xi^2)\).
+
+\textbf{Stage II: Learning the \(\mathbf{M}_2\).}
+After Stage I, the \(\mathbf{M}_1\) component has been fitted. The residual signal corresponds to the component \(\alpha_2 z_{2j}\mathbf{M}_{2j}\). For neurons \(i\in S_{2j,\mathrm{sure}}\), the restricted quadratic loss becomes:
+\begin{equation}
+L_{\mathrm{DM},2j}(w_i,v_i)
+=
+\mathbb{E}
+\Big[
+\tfrac12 \|
+v_i^{\top}(w_i^{\top}x_{\tau}-b_i)
+-
+\alpha_2 z_{2j} \mathbf{M}_{2j}
+\|_2^2
+\Big].
+\end{equation}
+Due to indicator stability \eqref{eq:indicator-always-on-stage2}, this loss is quadratic. Since the \(\mathbf{M}_2\) feature dominates the residual, the unique minimizer aligns purely with \(\mathbf{M}_{2j}\):
+\begin{equation}
+\label{eq:DM-opt-stage2-correct}
+w_i^{*} = \beta_{i,2j}^{*}\mathbf{M}_{2j},
+\qquad
+v_i^{*} = \gamma_{i,2j}^{*}\mathbf{M}_{2j}.
+\end{equation}
+
+\subsection{Smoothness and Gradient Descent Convergence}
+
+For all sure-set neurons, the restricted losses \(L_{\mathrm{DM},1j}\) and \(L_{\mathrm{DM},2j}\) are quadratic and convex. To apply standard optimization bounds, we first verify the smoothness condition.
+
+The Hessian of the loss is dominated by the covariance of the input \(x_\tau\). Using the bounds \(\mathbb{E}[\|x_{\tau}\|_2^2] = \Theta(1)\) (since signal and noise variance are bounded) and \(\|w_i^{(t)}\|_2 = \|v_i^{(t)}\|_2 = \Theta(1)\), the smoothness constant \(l_i\) satisfies:
+\begin{equation}
+l_i \approx \sup \| \nabla^2 L_{\mathrm{DM}, j} \|_2 = O(\|v_i^{(t)}\|_2^2 \mathbb{E}[\|x_{\tau}\|_2^2] + \|w_i^{(t)}\|_2^2 \mathbb{E}[\|x_{\tau}\|_2^2]) = \Theta(1).
+\end{equation}
+Let \(L = \max_i l_i = \Theta(1)\). We consider the gradient descent update rules with learning rate \(\eta \le 1/L\):
+\begin{equation}
+w_i^{(t+1)} = w_i^{(t)} - \eta \nabla_{w_i} L_{\mathrm{DM},j}^{(t)},
+\qquad
+v_i^{(t+1)} = v_i^{(t)} - \eta \nabla_{v_i} L_{\mathrm{DM},j}^{(t)}.
+\end{equation}
+By the Descent Lemma for \(L\)-smooth functions, we have:
+\begin{equation}
+\label{eq:dm-one-step-decrease-final}
+L_{\mathrm{DM},j}(w_i^{(t+1)}, v_i^{(t+1)})
+\le
+L_{\mathrm{DM},j}(w_i^{(t)}, v_i^{(t)})
+-
+\tfrac{\eta}{2}
+\|\nabla L_{\mathrm{DM},j}(w_i^{(t)}, v_i^{(t)})\|_2^{2}.
+\end{equation}
+
+Since the problem is locally convex, it satisfies the Polyak-Łojasiewicz (PL) condition, which relates the gradient norm to the sub-optimality gap:
+\begin{equation}
+\label{eq:dm-gradient-lower-bound-final}
+\|\nabla L_{\mathrm{DM},j}(w_i^{(t)}, v_i^{(t)})\|_2^2
+\ge
+\tfrac{2}{L}
+\big(L_{\mathrm{DM},j}(w_i^{(t)}, v_i^{(t)}) - L_{\mathrm{DM},j}(w_i^{*}, v_i^{*})\big).
+\end{equation}
+
+Averaging \eqref{eq:dm-one-step-decrease-final} over \(t=0,\dots,T_{\mathrm{DM}}-1\)
+and substituting \eqref{eq:dm-gradient-lower-bound-final} gives the telescope bound
+\begin{equation}
+\frac{1}{T_{\mathrm{DM}}}
+\sum_{t=0}^{T_{\mathrm{DM}}-1}
+L_{\mathrm{DM},j}(w_i^{(t)}, v_i^{(t)})
+\le
+L_{\mathrm{DM},j}(w_i^{*}, v_i^{*})
++
+\frac{L^{2}\Delta_0}{T_{\mathrm{DM}}},
+\end{equation}
+where \(\Delta_0 = L_{\mathrm{DM},j}(w_i^{(0)}, v_i^{(0)}) - L_{\mathrm{DM},j}(w_i^{*}, v_i^{*})\).
+
+Using \(T_{\mathrm{DM}} = \Theta(d)\), \(L=\Theta(1)\), and \(\Delta_0=\Theta(1)\), we obtain the convergence rate:
+\begin{equation}
+\frac{L^{2}\Delta_0}{T_{\mathrm{DM}}}
+= \Theta\Big(\frac{1}{d}\Big).
+\end{equation}
+
+Finally, we analyze the optimal loss value. Since the sparse coding model contains additive noise \(\xi\) with variance \(\Theta(1/d)\), and the dictionaries are orthonormal, the residual energy at the optimal solution is determined by the noise floor:
+\begin{equation}
+L_{\mathrm{DM},j}(w_i^{*}, v_i^{*}) = \Theta\Big(\frac{1}{d}\Big).
+\end{equation}
+
+Therefore, after \(T_{\mathrm{DM}}=\Theta(d)\) iterations, the expected diffusion loss satisfies:
+\begin{equation}
+L_{\mathrm{DM}}
+=
+\mathbb{E}_{x_0,\tau}\,\tfrac12\|g(x_{\tau}) - x_0\|_2^2
+\le
+\Theta\Big(\frac{1}{d}\Big).
+\end{equation}
+This confirms that every sure-set neuron converges to the aligned optimal solutions defined in \eqref{eq:DM-opt-stage1-correct} and \eqref{eq:DM-opt-stage2-correct}, effectively denoising the input signal.
+
+
+
+
+\section{Generalization}
+
+
+\subsection{Motivation: Score in Reverse-Time SDE}
+
+To rigorously justify the necessity of learning the score function, we adopt the continuous-time framework proposed by \citet{song2021scorebased}.
+Let the forward diffusion process be indexed by a continuous time variable $t \in [0, T]$, governed by the following It\^{o} Stochastic Differential Equation (SDE):
+\begin{equation}
+    d\mathbf{x} = \mathbf{f}(\mathbf{x}, t) dt + g(t) d\mathbf{w},
+\end{equation}
+where $\mathbf{f}(\cdot, t): \mathbb{R}^d \to \mathbb{R}^d$ is the drift coefficient, $g(t) \in \mathbb{R}$ is the diffusion coefficient, and $\mathbf{w}$ denotes the standard Brownian motion.
+This forward process progressively degrades the data distribution $p_0(\mathbf{x})$ into a noise distribution $p_T(\mathbf{x})$.
+
+The core insight for generative modeling relies on a remarkable result from Anderson (1982), which states that for any such forward SDE, there exists a corresponding \textit{reverse-time SDE}.
+This reverse process, running backwards from $t=T$ to $t=0$, is given by:
+\begin{equation}
+    \label{eq:reverse_sde_song}
+    d\mathbf{x} = \left[ \mathbf{f}(\mathbf{x}, t) - g(t)^2 \nabla_{\mathbf{x}} \log p_t(\mathbf{x}) \right] dt + g(t) d\bar{\mathbf{w}},
+\end{equation}
+where $d\bar{\mathbf{w}}$ is the Brownian motion in the reverse time direction, and $dt$ represents an infinitesimal negative time step.
+
+Equation \eqref{eq:reverse_sde_song} provides the theoretical motivation for score-based generative modeling.
+To simulate the reverse process and generate data from noise, we must approximate the reverse-time drift term:
+\begin{equation}
+    \underbrace{\mathbf{f}(\mathbf{x}, t)}_{\text{Known Design Choice}} - \underbrace{g(t)^2}_{\text{Known Coeff.}} \cdot \underbrace{\nabla_{\mathbf{x}} \log p_t(\mathbf{x})}_{\text{Unknown Score}}.
+\end{equation}
+While $\mathbf{f}(\mathbf{x}, t)$ and $g(t)$ are chosen by design (e.g., in Variance Exploding SDEs, $\mathbf{f}=\mathbf{0}$), the term $\nabla_{\mathbf{x}} \log p_t(\mathbf{x})$ depends on the evolving data density and is computationally intractable.
+Therefore, the generative task reduces to learning a time-dependent score-based model $s_{\theta}(\mathbf{x}, t) \approx \nabla_{\mathbf{x}} \log p_t(\mathbf{x})$.
+Once trained, this estimated score is plugged into Eq. \eqref{eq:reverse_sde_song}, allowing us to solve the reverse SDE numerically using methods such as the Euler-Maruyama discretization or predictor-corrector samplers.
+
+
+\subsection{Score Function}
+
+We begin by formalizing the forward corruption process used in diffusion
+training. The noisy observation is generated as
+\begin{equation}
+x_{\tau} = x_0 + \tau \epsilon,
+\qquad
+\epsilon \sim \mathcal N(0, I),
+\end{equation}
+so that, conditioned on the clean signal \(x_0\), the likelihood of the noisy
+sample \(x_{\tau}\) is Gaussian with covariance \(\tau^{2} I\):
+\begin{equation}
+p(x_{\tau} \mid x_0)
+=
+\frac{1}{(2\pi\tau^2)^{d_1/2}}
+\exp\!\left(
+-\frac{\|x_{\tau} - x_0\|_{2}^{2}}{2\tau^{2}}
+\right).
+\end{equation}
+
+Let \(p_{\tau}(x_{\tau})\) denote the marginal density of the noisy sample,
+integrated over the clean-data distribution:
+\begin{equation}
+p_{\tau}(x_{\tau})
+=
+\int p(x_{\tau} \mid x_0)\,p(x_0)\,dx_0.
+\end{equation}
+The target object of interest in reverse-time diffusion is the score function
+\begin{equation}
+s_{\tau}^{*}(x_{\tau})
+=
+\nabla_{x_{\tau}} \log p_{\tau}(x_{\tau}),
+\end{equation}
+which appears explicitly in the reverse-time SDE that governs generative
+sampling. Thus learning \(s_{\tau}^{*}(x_{\tau})\) is required for running the
+reverse diffusion process.
+
+To derive a closed-form expression for the score under the additive Gaussian
+model, we differentiate the marginal density:
+\begin{equation}
+\begin{aligned}
+\nabla_{x_{\tau}} p_{\tau}(x_{\tau})
+&=
+\nabla_{x_{\tau}}
+\int p(x_{\tau} \mid x_0)\,p(x_0)\,dx_0
+\\
+&=
+\int \nabla_{x_{\tau}} p(x_{\tau} \mid x_0)\,p(x_0)\,dx_0.
+\end{aligned}
+\end{equation}
+The Gaussian likelihood satisfies
+\begin{equation}
+\nabla_{x_{\tau}} p(x_{\tau} \mid x_0)
+=
+p(x_{\tau} \mid x_0)
+\left(
+-\frac{x_{\tau} - x_0}{\tau^{2}}
+\right).
+\end{equation}
+Substituting this expression yields
+\begin{equation}
+\begin{aligned}
+\nabla_{x_{\tau}} p_{\tau}(x_{\tau})
+&=
+\int p(x_{\tau} \mid x_0)\,p(x_0)\,
+\frac{x_0 - x_{\tau}}{\tau^{2}}\,dx_0
+\\
+&=
+\frac{1}{\tau^{2}}
+\left(
+\int x_0\,p(x_{\tau} \mid x_0)\,p(x_0)\,dx_0
+-
+x_{\tau}
+\int p(x_{\tau} \mid x_0)\,p(x_0)\,dx_0
+\right).
+\end{aligned}
+\end{equation}
+The second integral is simply \(p_{\tau}(x_{\tau})\). Using Bayes' rule for the
+first integral,
+\begin{equation}
+p(x_0 \mid x_{\tau})
+=
+\frac{p(x_{\tau} \mid x_0)\,p(x_0)}{p_{\tau}(x_{\tau})},
+\end{equation}
+we obtain
+\begin{equation}
+\int x_0\,p(x_{\tau} \mid x_0)\,p(x_0)\,dx_0
+=
+p_{\tau}(x_{\tau})\,\mathbb E[x_0 \mid x_{\tau}].
+\end{equation}
+Therefore,
+\begin{equation}
+\nabla_{x_{\tau}} p_{\tau}(x_{\tau})
+=
+\frac{p_{\tau}(x_{\tau})}{\tau^{2}}
+\big(
+\mathbb E[x_0 \mid x_{\tau}] - x_{\tau}
+\big),
+\end{equation}
+and dividing by \(p_{\tau}(x_{\tau})\) gives Tweedie's formula:
+\begin{equation}
+\label{eq:score-tweedie}
+s_{\tau}^{*}(x_{\tau})
+=
+\nabla_{x_{\tau}} \log p_{\tau}(x_{\tau})
+=
+\frac{\mathbb E[x_0 \mid x_{\tau}] - x_{\tau}}{\tau^{2}}.
+\end{equation}
+
+The diffusion-training objective
+\begin{equation}
+L_{\mathrm{DM}}
+=
+\mathbb E_{x_0,\tau}\,
+\frac{1}{2}
+\|g(x_{\tau}) - x_0\|_{2}^{2}
+\end{equation}
+is an MSE regression of \(x_0\) on the noisy observation \(x_{\tau}\). Its
+population minimizer satisfies
+\begin{equation}
+g^{*}(x_{\tau})
+=
+\mathbb E[x_0 \mid x_{\tau}].
+\end{equation}
+Combining this with \eqref{eq:score-tweedie}, we obtain the identity
+\begin{equation}
+s_{\tau}^{*}(x_{\tau})
+=
+\frac{g^{*}(x_{\tau}) - x_{\tau}}{\tau^{2}},
+\end{equation}
+showing that learning the MMSE denoiser is equivalent to learning the score
+function required by the reverse diffusion SDE.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+% \subsection{Score Function via Projection Decomposition}
+
+% We consider the generative model \( x_{0} = \alpha_{1}\mathbf{M}_{1} z_{1} + \alpha_{2}\mathbf{M}_{2} z_{2} \), where \( \mathbf{M}_{1}, \mathbf{M}_{2} \in \mathbb{R}^{d_{1}\times d} \) have orthonormal columns and span two orthogonal feature subspaces. The noisy observation is \( x_{\tau} = x_{0} + \tau \epsilon \) with \( \epsilon \sim \mathcal{N}(0,I_{d_{1}}) \).  
+% Using the Tweedie identity, the score function is
+% \begin{equation}
+% s_{\tau}^{*}(x_{\tau}) = \frac{ \mathbb{E}[x_{0}\mid x_{\tau}] - x_{\tau} }{\tau^{2}} .
+% \end{equation}
+
+% \subsubsection*{Projection of the noisy observation}
+
+% Define the projection coefficients
+% \begin{equation}
+% y_{1} = \mathbf{M}_{1}^{\top} x_{\tau},
+% \qquad
+% y_{2} = \mathbf{M}_{2}^{\top} x_{\tau}.
+% \end{equation}
+% Using
+% \(
+% x_{\tau}
+% =
+% \alpha_{1}\mathbf{M}_{1} z_{1}
+% +
+% \alpha_{2}\mathbf{M}_{2} z_{2}
+% +
+% \tau \epsilon
+% \),
+% we obtain
+% \begin{equation}
+% y_{1}
+% =
+% \alpha_{1} z_{1}
+% +
+% \tau \mathbf{M}_{1}^{\top}\epsilon,
+% \qquad
+% y_{2}
+% =
+% \alpha_{2} z_{2}
+% +
+% \tau \mathbf{M}_{2}^{\top}\epsilon.
+% \end{equation}
+% Since \(\mathbf{M}_{1},\mathbf{M}_{2}\) have orthonormal columns and are orthogonal,
+% \begin{equation}
+% \xi_{1} = \mathbf{M}_{1}^{\top}\epsilon
+% \sim \mathcal N(0,I_{d}),
+% \qquad
+% \xi_{2} = \mathbf{M}_{2}^{\top}\epsilon
+% \sim \mathcal N(0,I_{d}),
+% \end{equation}
+% and \(\xi_{1},\xi_{2}\) are independent. Hence we can write
+% \begin{equation}
+% y_{1} = \alpha_{1} z_{1} + \tau \xi_{1},
+% \qquad
+% y_{2} = \alpha_{2} z_{2} + \tau \xi_{2}.
+% \end{equation}
+
+
+
+% \subsubsection*{Posterior mean in each subspace}
+
+% The posterior mean decomposes across the two feature subspaces:
+% \begin{equation}
+% \mathbb{E}[x_{0}\mid x_{\tau}]
+% =
+% \alpha_{1}\mathbf{M}_{1}\hat{z}_{1}(y_{1})
+% +
+% \alpha_{2}\mathbf{M}_{2}\hat{z}_{2}(y_{2}),
+% \end{equation}
+% where
+% \begin{equation}
+% \hat{z}_{k}(y_{k}) = \mathbb{E}[ z_{k} \mid y_{k} ],
+% \qquad
+% k\in\{1,2\}.
+% \end{equation}
+
+
+
+% \subsubsection*{Decomposition of the score}
+
+% Combining the posterior mean representation with the Tweedie identity gives
+% \begin{equation}
+% s_{\tau}^{*}(x_{\tau})
+% =
+% \frac{1}{\tau^{2}}
+% \Bigl(
+% \alpha_{1}\mathbf{M}_{1}\hat{z}_{1}(y_{1})
+% +
+% \alpha_{2}\mathbf{M}_{2}\hat{z}_{2}(y_{2})
+% -
+% x_{\tau}
+% \Bigr),
+% \end{equation}
+% where \(y_{k} = \mathbf{M}_{k}^{\top} x_{\tau}\) and
+% \(\hat{z}_{k}(y_{k}) = \mathbb{E}[z_{k}\mid y_{k}]\) for \(k\in\{1,2\}\).
+
+%  In the subsequent
+% regime-wise analysis, it suffices to control the behavior of the coordinate-wise
+% denoisers \(\hat{z}_{k}^{j}(y_{k}^{j})\).
+
+
+\subsection{Score Function via Projection Decomposition}
+
+We consider the generative model
+\begin{equation}
+x_{0} = \alpha_{1}\mathbf{M}_{1} z_{1} + \alpha_{2}\mathbf{M}_{2} z_{2},
+\end{equation}
+where \( \mathbf{M}_{1}, \mathbf{M}_{2} \in \mathbb{R}^{d_{1}\times d} \) have orthonormal columns and span two orthogonal feature subspaces. The noisy observation is
+\begin{equation}
+x_{\tau} = x_{0} + \tau \epsilon,
+\qquad
+\epsilon \sim \mathcal{N}(0,I_{d_{1}}).
+\end{equation}
+Using the Tweedie identity, the score function is
+\begin{equation}
+s_{\tau}^{*}(x_{\tau})
+=
+\frac{ \mathbb{E}[x_{0}\mid x_{\tau}] - x_{\tau} }{\tau^{2}} .
+\end{equation}
+
+We first project the noisy sample onto the two feature subspaces. Define
+\begin{equation}
+y_{1} = \mathbf{M}_{1}^{\top} x_{\tau},
+\qquad
+y_{2} = \mathbf{M}_{2}^{\top} x_{\tau}.
+\end{equation}
+Using
+\(
+x_{\tau}
+=
+\alpha_{1}\mathbf{M}_{1} z_{1}
++
+\alpha_{2}\mathbf{M}_{2} z_{2}
++
+\tau \epsilon
+\),
+we obtain
+\begin{equation}
+y_{1}
+=
+\alpha_{1} z_{1}
++
+\tau \mathbf{M}_{1}^{\top}\epsilon,
+\qquad
+y_{2}
+=
+\alpha_{2} z_{2}
++
+\tau \mathbf{M}_{2}^{\top}\epsilon.
+\end{equation}
+Since \(\mathbf{M}_{1},\mathbf{M}_{2}\) have orthonormal columns and are orthogonal, the projected noise terms
+\begin{equation}
+\xi_{1} = \mathbf{M}_{1}^{\top}\epsilon
+\sim \mathcal N(0,I_{d}),
+\qquad
+\xi_{2} = \mathbf{M}_{2}^{\top}\epsilon
+\sim \mathcal N(0,I_{d}),
+\end{equation}
+are i.i.d. standard Gaussian, and \(\xi_{1},\xi_{2}\) are independent. Hence we can write
+\begin{equation}
+y_{1} = \alpha_{1} z_{1} + \tau \xi_{1},
+\qquad
+y_{2} = \alpha_{2} z_{2} + \tau \xi_{2}.
+\end{equation}
+
+Because the prior and the Gaussian likelihood factorize across the two
+orthogonal subspaces, the posterior mean also decomposes as
+\begin{equation}
+\mathbb{E}[x_{0}\mid x_{\tau}]
+=
+\alpha_{1}\mathbf{M}_{1}\hat{z}_{1}(y_{1})
++
+\alpha_{2}\mathbf{M}_{2}\hat{z}_{2}(y_{2}),
+\end{equation}
+where
+\begin{equation}
+\hat{z}_{k}(y_{k}) = \mathbb{E}[ z_{k} \mid y_{k} ],
+\qquad
+k\in\{1,2\}.
+\end{equation}
+Combining this representation with the Tweedie identity gives
+\begin{equation}
+s_{\tau}^{*}(x_{\tau})
+=
+\frac{1}{\tau^{2}}
+\Bigl(
+\alpha_{1}\mathbf{M}_{1}\hat{z}_{1}(y_{1})
++
+\alpha_{2}\mathbf{M}_{2}\hat{z}_{2}(y_{2})
+-
+x_{\tau}
+\Bigr),
+\end{equation}
+where \(y_{k} = \mathbf{M}_{k}^{\top} x_{\tau}\) and
+\(\hat{z}_{k}(y_{k}) = \mathbb{E}[z_{k}\mid y_{k}]\) for \(k\in\{1,2\}\).
+In the subsequent regime-wise analysis, it therefore suffices to control the
+behavior of the coordinate-wise denoisers \(\hat{z}_{k}^{j}(y_{k}^{j})\).
+
+
+
+
+
+
+
+
+\subsection{Posterior Mean under a Sparse Prior}
+
+Let \(z=(z^{1},\dots,z^{d}) \in \{-1,0,1\}^{d}\) be a sparse latent vector whose
+coordinates are independent and satisfy
+\begin{equation}
+\Pr(z^{j}=1) = \Theta(1/d),
+\qquad
+\Pr(z^{j}=-1) = \Theta(1/d),
+\qquad
+\Pr(z^{j}=0) = 1-\Theta(1/d).
+\end{equation}
+Thus only \(O(1)\) coordinates of \(z\) are nonzero in expectation.
+
+The observation model is
+\begin{equation}
+y = \alpha z + \tau \xi,
+\qquad
+\xi \sim \mathcal N(0,I_{d}),
+\end{equation}
+so that each coordinate satisfies
+\begin{equation}
+y^{j} = \alpha z^{j} + \tau \xi^{j},
+\qquad
+\xi^{j} \sim \mathcal N(0,1).
+\end{equation}
+
+Since both the likelihood and the prior factorize across coordinates, the
+posterior also factorizes:
+\begin{equation}
+\mathbb{E}[z \mid y]
+=
+\bigl(\hat z^{1}(y^{1}),\dots,\hat z^{d}(y^{d})\bigr),
+\end{equation}
+where each scalar posterior mean is
+\begin{equation}
+\hat z^{j}(y^{j})
+=
+\mathbb{E}[z^{j}\mid y^{j}]
+=
+\Pr(z^{j}=1\mid y^{j})
+-
+\Pr(z^{j}=-1\mid y^{j}).
+\end{equation}
+
+We now derive the scalar expression for a generic coordinate \(j\). The likelihood is
+\begin{equation}
+p(y^{j}\mid z^{j})
+\propto
+\exp\!\left(
+-\frac{(y^{j}-\alpha z^{j})^{2}}{2\tau^{2}}
+\right),
+\end{equation}
+and the prior has masses \(\Theta(1/d)\) at \(z^{j}=\pm 1\) and \(1-\Theta(1/d)\)
+at \(z^{j}=0\). Bayes' rule gives
+\begin{equation}
+\hat z^{j}(y^{j})
+=
+\frac{
+p(y^{j}\mid 1)\,\Theta(1/d)
+-
+p(y^{j}\mid -1)\,\Theta(1/d)
+}{
+p(y^{j}\mid 0)\bigl(1-\Theta(1/d)\bigr)
++
+p(y^{j}\mid 1)\,\Theta(1/d)
++
+p(y^{j}\mid -1)\,\Theta(1/d)
+}.
+\end{equation}
+
+Introduce the likelihood ratios
+\begin{equation}
+L_{1}^{j}
+=
+\exp\!\left(
+\frac{2\alpha y^{j} - \alpha^{2}}{2\tau^{2}}
+\right),
+\qquad
+L_{-1}^{j}
+=
+\exp\!\left(
+\frac{-2\alpha y^{j} - \alpha^{2}}{2\tau^{2}}
+\right),
+\end{equation}
+and define the sparsity bias
+\begin{equation}
+B = \ln\frac{1-\Theta(1/d)}{\Theta(1/d)} = \Theta(\ln d).
+\end{equation}
+Dividing numerator and denominator by \(p(y^{j}\mid 0)(1-\Theta(1/d))\) yields the
+closed-form scalar denoiser
+\begin{equation}
+\hat z^{j}(y^{j})
+=
+\frac{
+e^{-B}\,(L_{1}^{j} - L_{-1}^{j})
+}{
+1 + e^{-B}\,(L_{1}^{j} + L_{-1}^{j})
+}.
+\end{equation}
+
+Using the identities
+\begin{equation}
+L_1^{j}
+=
+\exp\!\left(
+-\frac{\alpha^{2}}{2\tau^{2}}
+\right)
+\exp\!\left(
+\frac{\alpha y^{j}}{\tau^{2}}
+\right),
+\qquad
+L_{-1}^{j}
+=
+\exp\!\left(
+-\frac{\alpha^{2}}{2\tau^{2}}
+\right)
+\exp\!\left(
+-\frac{\alpha y^{j}}{\tau^{2}}
+\right),
+\end{equation}
+we obtain
+\begin{equation}
+L_1^{j} - L_{-1}^{j}
+=
+\exp\!\left(
+-\frac{\alpha^{2}}{2\tau^{2}}
+\right)
+\Big(
+e^{\alpha y^{j}/\tau^{2}} - e^{-\alpha y^{j}/\tau^{2}}
+\Big)
+=
+\exp\!\left(
+-\frac{\alpha^{2}}{2\tau^{2}}
+\right)
+2\sinh\!\left(\frac{\alpha y^{j}}{\tau^{2}}\right),
+\end{equation}
+and
+\begin{equation}
+L_1^{j} + L_{-1}^{j}
+=
+\exp\!\left(
+-\frac{\alpha^{2}}{2\tau^{2}}
+\right)
+\Big(
+e^{\alpha y^{j}/\tau^{2}} + e^{-\alpha y^{j}/\tau^{2}}
+\Big)
+=
+\exp\!\left(
+-\frac{\alpha^{2}}{2\tau^{2}}
+\right)
+2\cosh\!\left(\frac{\alpha y^{j}}{\tau^{2}}\right).
+\end{equation}
+Substituting these expressions gives the compact hyperbolic form
+\begin{equation}
+\hat z^{j}(y^{j})
+=
+\frac{
+e^{-B}
+e^{-\frac{\alpha^{2}}{2\tau^{2}}}
+2\sinh\!\left(\frac{\alpha y^{j}}{\tau^{2}}\right)
+}{
+1
++
+e^{-B}
+e^{-\frac{\alpha^{2}}{2\tau^{2}}}
+2\cosh\!\left(\frac{\alpha y^{j}}{\tau^{2}}\right)
+}.
+\end{equation}
+
+This expression admits a simple asymptotic interpretation. Define the logistic function
+\begin{equation}
+\sigma(u)
+=
+\frac{1}{1+e^{-u}}.
+\end{equation}
+
+For large positive \(y^{j}\), one has \(L_{-1}^{j} \ll L_1^{j}\), so
+\begin{equation}
+\hat z^{j}(y^{j})
+\approx
+\frac{e^{-B} L_1^{j}}{1 + e^{-B} L_1^{j}}
+=
+\sigma\!\left(
+\log L_1^{j} - B
+\right)
+=
+\sigma\!\left(
+\frac{2\alpha y^{j} - \alpha^{2}}{2\tau^{2}} - B
+\right),
+\end{equation}
+which approaches \(1\) as \(y^{j}\) grows. For large negative \(y^{j}\), one has \(L_1^{j} \ll L_{-1}^{j}\), and
+\begin{equation}
+\hat z^{j}(y^{j})
+\approx
+-\frac{e^{-B} L_{-1}^{j}}{1 + e^{-B} L_{-1}^{j}}
+=
+-\sigma\!\left(
+\log L_{-1}^{j} - B
+\right)
+=
+-\sigma\!\left(
+\frac{-2\alpha y^{j} - \alpha^{2}}{2\tau^{2}} - B
+\right),
+\end{equation}
+which approaches \(-1\) as \(y^{j}\) decreases. When \(y^{j}\) is close to zero, the contributions of \(L_1^{j}\) and \(L_{-1}^{j}\) nearly cancel in the numerator while the denominator is dominated by the constant term, so \(\hat z^{j}(y^{j})\) stays close to zero. Thus the ternary posterior mean interpolates between \(-1\), \(0\), and \(1\) via a symmetric soft-thresholding nonlinearity.
+
+Having established the behavior of the scalar posterior mean,
+we now substitute this estimator into the structured score decomposition and
+work out its regime-wise behavior in detail.
+
+
+
+
+\paragraph{High-noise regime}
+Assume
+\(
+\tau \ge (1+\delta)\frac{\alpha_1}{\sqrt{2\ln d}}
+\)
+for some fixed \(\delta>0\).
+For any coordinate \(j\) and subspace \(k\in\{1,2\}\), the observation satisfies
+\begin{equation}
+y_k^{j}=\alpha_k z_k^{j}+\tau \xi_k^{j},
+\qquad
+\xi_k^{j}\sim\mathcal N(0,1).
+\end{equation}
+In this regime, the signal-to-noise ratio is insufficient to overcome the
+sparsity bias \(B=\Theta(\ln d)\), and the scalar posterior mean remains
+strongly suppressed.
+
+We now bound the noise-averaged denoiser.
+Fix \(k\in\{1,2\}\) and \(j\in[d]\).
+Using the positive-tail approximation (which applies whenever the likelihood
+ratio is dominated by \(L_1^j\)),
+\begin{equation}
+\hat z^{j}(y_k^{j})
+\approx
+\sigma\!\left(
+\frac{2\alpha_k y_k^{j}-\alpha_k^2}{2\tau^2}-B
+\right)
+=
+\sigma\!\left(
+\mu_{k}^{j}
++
+\frac{\alpha_k}{\tau}\,\xi_k^{j}
+\right),
+\end{equation}
+where
+\begin{equation}
+\mu_{k}^{j}
+=
+\frac{\alpha_k^2(2z_k^{j}-1)}{2\tau^2}-B.
+\end{equation}
+Similarly, when the negative tail dominates,
+\begin{equation}
+-\hat z^{j}(y_k^{j})
+\approx
+\sigma\!\left(
+\tilde\mu_{k}^{j}
++
+\frac{\alpha_k}{\tau}\,\xi_k^{j}
+\right),
+\qquad
+\tilde\mu_{k}^{j}
+=
+\frac{\alpha_k^2(-2z_k^{j}-1)}{2\tau^2}-B.
+\end{equation}
+In both cases, the argument of the sigmoid is an affine Gaussian function of
+\(\xi_k^{j}\).
+
+Applying Lemma~\ref{lem:gaussian-logistic-moment} with
+\[
+X=\mu_{k}^{j}+(\alpha_k/\tau)\xi_k^{j}
+\sim\mathcal N\!\left(\mu_{k}^{j},\frac{\alpha_k^2}{\tau^2}\right),
+\]
+and using the elementary inequality
+\(\sigma(x)\le e^{x}\) for all \(x\in\mathbb R\),
+together with the Gaussian moment generating function, we obtain
+\begin{equation}
+\mathbb E_{\xi_k^{j}}\!\bigl[\sigma(X)\bigr]
+\le
+\exp\!\left(
+\mu_{k}^{j}+\frac{\alpha_k^2}{2\tau^2}
+\right),
+\qquad
+\mathbb E_{\xi_k^{j}}\!\bigl[\sigma(\tilde X)\bigr]
+\le
+\exp\!\left(
+\tilde\mu_{k}^{j}+\frac{\alpha_k^2}{2\tau^2}
+\right),
+\end{equation}
+where \(\tilde X=\tilde\mu_{k}^{j}+(\alpha_k/\tau)\xi_k^{j}\).
+
+Under the assumption
+\(\tau \ge (1+\delta)\alpha_1/\sqrt{2\ln d}\),
+we have
+\[
+\frac{\alpha_k^2}{2\tau^2}
+\le
+\frac{1}{(1+\delta)^2}\,\ln d
+\quad\text{and}\quad
+B = c_0 \ln d
+\]
+for some absolute constant \(c_0>1\).
+Consequently, there exists \(c(\delta)>0\) such that
+\[
+\mu_k^{j}+\frac{\alpha_k^2}{2\tau^2}
+\le
+- c(\delta)\,\ln d
+\quad\text{and}\quad
+\tilde\mu_k^{j}+\frac{\alpha_k^2}{2\tau^2}
+\le
+- c(\delta)\,\ln d
+\]
+uniformly over all \(j\in[d]\) and \(k\in\{1,2\}\).
+Therefore,
+\begin{equation}
+\left|
+\mathbb E_{\xi_k^{j}}\!\left[\hat z^{j}(y_k^{j})\mid z_k^{j}\right]
+\right|
+\le
+C\,d^{-c(\delta)}
+\end{equation}
+for some constant \(C>0\).
+
+Hence, in the high-noise regime, the conditional expectation of each
+coordinate-wise posterior mean is uniformly negligible across both feature
+subspaces. This noise-averaged suppression is the only property required for
+the subsequent comparison between \(g(x_\tau)\) and
+\(\mathbb E[x_0\mid x_\tau]\).
+
+
+
+
+\paragraph{Intermediate-noise regime}
+Assume
+\(
+\frac{(1+\delta)\alpha_2}{\sqrt{2\ln d}}
+\ll
+\tau
+\ll
+\frac{(1-\delta)\alpha_1}{\sqrt{2\ln d}}
+\).
+We analyze the noise-averaged behavior of the coordinate-wise posterior mean
+\(\hat z^{j}(y_k^{j})\) for each subspace \(k\in\{1,2\}\).
+
+\textbf{Strong component (\(k=1\)).}
+For an active coordinate with \(z_1^{j}=1\), the observation satisfies
+\begin{equation}
+y_1^{j}=\alpha_1+\tau\xi_1^{j},
+\qquad
+\xi_1^{j}\sim\mathcal N(0,1).
+\end{equation}
+Using the large-positive approximation of the scalar posterior mean,
+\begin{equation}
+\hat z^{j}(y_1^{j})
+\approx
+\sigma\!\left(
+\frac{2\alpha_1 y_1^{j}-\alpha_1^2}{2\tau^2}-B
+\right)
+=
+\sigma\!\left(
+\mu_1^{+}+\frac{\alpha_1}{\tau}\xi_1^{j}
+\right),
+\end{equation}
+where
+\begin{equation}
+\mu_1^{+}
+=
+\frac{\alpha_1^2}{2\tau^2}-B.
+\end{equation}
+Under the assumption
+\(
+\tau \le (1-\delta)\alpha_1/\sqrt{2\ln d}
+\),
+we have
+\[
+\frac{\alpha_1^2}{2\tau^2}
+\ge
+\frac{1}{(1-\delta)^2}\ln d,
+\qquad
+B=c_0\ln d
+\]
+for some absolute constant \(c_0>1\).
+Hence there exists \(c=c(\delta)>0\) such that
+\(
+\mu_1^{+}\ge c\ln d
+\).
+
+Applying Lemma~\ref{lem:gaussian-logistic-moment} with
+\(X=\mu_1^{+}+(\alpha_1/\tau)\xi_1^{j}\),
+and using the inequality \(1-\sigma(x)\le e^{-x}\),
+together with the Gaussian moment generating function, we obtain
+\begin{equation}
+\mathbb E_{\xi_1^{j}}\!\left[1-\hat z^{j}(y_1^{j})\mid z_1^{j}=1\right]
+\le
+\exp\!\left(
+-\mu_1^{+}+\frac{\alpha_1^2}{2\tau^2}
+\right)
+\le
+C\,d^{-c},
+\end{equation}
+which implies
+\begin{equation}
+\mathbb E_{\xi_1^{j}}\!\left[\hat z^{j}(y_1^{j})\mid z_1^{j}=1\right]
+=
+1-O(d^{-c}).
+\end{equation}
+
+For inactive coordinates with \(z_1^{j}=0\), we have
+\(y_1^{j}=\tau\xi_1^{j}\) and
+\begin{equation}
+\hat z^{j}(y_1^{j})
+\approx
+\sigma\!\left(
+\mu_1^{0}+\frac{\alpha_1}{\tau}\xi_1^{j}
+\right),
+\qquad
+\mu_1^{0}
+=
+-\frac{\alpha_1^2}{2\tau^2}-B.
+\end{equation}
+Since \(\mu_1^{0}\le -c\ln d\),
+the inequality \(\sigma(x)\le e^{x}\) yields
+\begin{equation}
+\left|
+\mathbb E_{\xi_1^{j}}\!\left[\hat z^{j}(y_1^{j})\mid z_1^{j}=0\right]
+\right|
+\le
+C\,d^{-c}.
+\end{equation}
+Thus, after averaging over the Gaussian noise, the strong component is
+recovered coordinate-wise up to vanishing error.
+
+\textbf{Weak component (\(k=2\)).}
+For any coordinate \(j\), the observation satisfies
+\begin{equation}
+y_2^{j}=\alpha_2 z_2^{j}+\tau\xi_2^{j}.
+\end{equation}
+Using the same approximation,
+\begin{equation}
+\hat z^{j}(y_2^{j})
+\approx
+\sigma\!\left(
+\mu_2^{j}+\frac{\alpha_2}{\tau}\xi_2^{j}
+\right),
+\qquad
+\mu_2^{j}
+=
+\frac{\alpha_2^2(2z_2^{j}-1)}{2\tau^2}-B.
+\end{equation}
+The assumption
+\(
+\tau \ge (1+\delta)\alpha_2/\sqrt{2\ln d}
+\)
+implies
+\[
+\frac{\alpha_2^2}{2\tau^2}
+\le
+\frac{1}{(1+\delta)^2}\ln d,
+\qquad
+B=c_0\ln d,
+\]
+so there exists \(c'>0\) such that
+\(
+\mu_2^{j}\le -c'\ln d
+\)
+uniformly over all \(j\).
+Applying Lemma~\ref{lem:gaussian-logistic-moment} and
+\(\sigma(x)\le e^{x}\), we obtain
+\begin{equation}
+\left|
+\mathbb E_{\xi_2^{j}}\!\left[\hat z^{j}(y_2^{j})\mid z_2^{j}\right]
+\right|
+\le
+C\,d^{-c'}
+\qquad
+\forall j.
+\end{equation}
+
+\textbf{Conclusion.}
+In the intermediate-noise regime, the noise-averaged posterior mean satisfies
+\begin{equation}
+\mathbb E_{\xi}\!\left[\hat z_1^{j}(y_1^{j})\mid z_1^{j}\right]
+=
+z_1^{j}+O(d^{-c}),
+\qquad
+\mathbb E_{\xi}\!\left[\hat z_2^{j}(y_2^{j})\mid z_2^{j}\right]
+=
+O(d^{-c'}),
+\end{equation}
+uniformly over coordinates.
+Thus, after averaging over the Gaussian noise, the strong component is
+reliably recovered while the weak component remains suppressed, which is
+precisely the behavior required for the subsequent comparison between
+\(g(x_\tau)\) and \(\mathbb E[x_0\mid x_\tau]\).
+
+
+
+\paragraph{Low-noise regime}
+Assume
+\(
+\tau \le (1-\delta)\frac{\alpha_2}{\sqrt{2\ln d}}
+\)
+for some \(\delta>0\).
+We analyze the noise-averaged behavior of the coordinate-wise posterior mean
+\(\hat z^{j}(y_k^{j})\) for both subspaces \(k\in\{1,2\}\).
+
+\textbf{Weak component (\(k=2\)).}
+For an active coordinate with \(z_2^{j}=1\), the observation is
+\begin{equation}
+y_2^{j}=\alpha_2+\tau\xi_2^{j},
+\qquad
+\xi_2^{j}\sim\mathcal N(0,1).
+\end{equation}
+Using the large-positive approximation of the scalar posterior mean,
+\begin{equation}
+\hat z^{j}(y_2^{j})
+\approx
+\sigma\!\left(
+\frac{2\alpha_2 y_2^{j}-\alpha_2^2}{2\tau^2}-B
+\right)
+=
+\sigma\!\left(
+\mu_2^{+}+\frac{\alpha_2}{\tau}\xi_2^{j}
+\right),
+\end{equation}
+where
+\begin{equation}
+\mu_2^{+}
+=
+\frac{\alpha_2^2}{2\tau^2}-B.
+\end{equation}
+Under the assumption
+\(
+\tau \le (1-\delta)\alpha_2/\sqrt{2\ln d}
+\),
+we have
+\[
+\frac{\alpha_2^2}{2\tau^2}
+\ge
+\frac{1}{(1-\delta)^2}\ln d,
+\qquad
+B=c_0\ln d
+\]
+for some absolute constant \(c_0>1\).
+Hence there exists \(c=c(\delta)>0\) such that
+\(
+\mu_2^{+}\ge c\ln d
+\).
+
+Applying Lemma~\ref{lem:gaussian-logistic-moment} with
+\(X=\mu_2^{+}+(\alpha_2/\tau)\xi_2^{j}\),
+and using the inequality \(1-\sigma(x)\le e^{-x}\),
+together with the Gaussian moment generating function, we obtain
+\begin{equation}
+\mathbb E_{\xi_2^{j}}\!\left[1-\hat z^{j}(y_2^{j})\mid z_2^{j}=1\right]
+\le
+\exp\!\left(
+-\mu_2^{+}+\frac{\alpha_2^2}{2\tau^2}
+\right)
+\le
+C\,d^{-c},
+\end{equation}
+which implies
+\begin{equation}
+\mathbb E_{\xi_2^{j}}\!\left[\hat z^{j}(y_2^{j})\mid z_2^{j}=1\right]
+=
+1-O(d^{-c}).
+\end{equation}
+
+For inactive coordinates with \(z_2^{j}=0\), the observation reduces to
+\(y_2^{j}=\tau\xi_2^{j}\), and the logistic argument has mean
+\begin{equation}
+\mu_2^{0}
+=
+-\frac{\alpha_2^2}{2\tau^2}-B
+\le
+-c\ln d.
+\end{equation}
+Using \(\sigma(x)\le e^{x}\) and Lemma~\ref{lem:gaussian-logistic-moment}, we obtain
+\begin{equation}
+\left|
+\mathbb E_{\xi_2^{j}}\!\left[\hat z^{j}(y_2^{j})\mid z_2^{j}=0\right]
+\right|
+\le
+C\,d^{-c}.
+\end{equation}
+
+\textbf{Strong component (\(k=1\)).}
+Since \(\alpha_1>\alpha_2\), the condition
+\(
+\tau \le (1-\delta)\alpha_2/\sqrt{2\ln d}
+\)
+implies
+\(
+\tau \ll \alpha_1/\sqrt{2\ln d}
+\).
+Repeating the same argument as in the intermediate-noise regime yields
+\begin{equation}
+\mathbb E_{\xi_1^{j}}\!\left[\hat z^{j}(y_1^{j})\mid z_1^{j}\right]
+=
+z_1^{j}+O(d^{-c}),
+\end{equation}
+uniformly over all coordinates.
+
+\textbf{Conclusion.}
+In the low-noise regime, the noise-averaged posterior mean satisfies
+\begin{equation}
+\mathbb E_{\xi}\!\left[\hat z_1^{j}(y_1^{j})\mid z_1^{j}\right]
+=
+z_1^{j}+O(d^{-c}),
+\qquad
+\mathbb E_{\xi}\!\left[\hat z_2^{j}(y_2^{j})\mid z_2^{j}\right]
+=
+z_2^{j}+O(d^{-c}),
+\end{equation}
+uniformly over coordinates.
+Thus, after averaging over the Gaussian noise, both the strong and weak
+components are recovered with vanishing error, which completes the
+three-regime characterization of the posterior mean dynamics.
+
+
+\paragraph{Summary.}
+The above analysis establishes a sharp three-regime characterization of the
+noise-averaged posterior mean under a ternary sparse prior.
+In the high-noise regime, the sparsity bias dominates the likelihood uniformly
+across subspaces, and the conditional expectation
+\(\mathbb E_{\xi}[\hat z^{j}(y_k^{j})\mid z_k^{j}]\)
+is exponentially suppressed for all coordinates, yielding a purely
+shrinkage-dominated behavior.
+In the intermediate-noise regime, the posterior mean exhibits a separation of
+scales: coordinates associated with the strong component are recovered with
+vanishing error after noise averaging, while those associated with the weak
+component remain suppressed.
+In the low-noise regime, the signal-to-noise ratio exceeds the sparsity threshold
+for both components, and the noise-averaged posterior mean converges
+coordinate-wise to the ground-truth latent vector.
+Together, these results show that the ternary posterior mean undergoes a
+well-defined phase transition structure governed by the relative magnitude of
+\(\tau\) and \(\alpha_k/\sqrt{2\ln d}\), providing a rigorous foundation for the
+subsequent comparison between learned score functions and the exact conditional
+expectation \(\mathbb E[x_0\mid x_\tau]\).
+
+
+
+
+
+
+% \paragraph{Intermediate-noise regime}
+% Assume
+% \(
+% \frac{(1+\delta)\alpha_2}{\sqrt{2\ln d}}
+% \ll
+% \tau
+% \ll
+% \frac{(1-\delta)\alpha_1}{\sqrt{2\ln d}}.
+% \)
+
+% We analyze the noise-averaged behavior of the coordinate-wise posterior mean
+% \(\hat z^{j}(y_k^{j})\) for each subspace \(k\in\{1,2\}\).
+
+% \textbf{Strong component (\(k=1\)).}
+% For an active coordinate with \(z_1^{j}=1\), the observation is
+% \begin{equation}
+% y_1^{j}=\alpha_1+\tau\xi_1^{j}.
+% \end{equation}
+% Using the large-positive approximation of the scalar denoiser,
+% \begin{equation}
+% \hat z^{j}(y_1^{j})
+% \approx
+% \sigma\!\left(
+% \frac{2\alpha_1 y_1^{j}-\alpha_1^2}{2\tau^2}-B
+% \right)
+% =
+% \sigma\!\left(
+% \mu_1^{+}+\frac{\alpha_1}{\tau}\xi_1^{j}
+% \right),
+% \end{equation}
+% where
+% \begin{equation}
+% \mu_1^{+}=\frac{\alpha_1^2}{2\tau^2}-B.
+% \end{equation}
+% Under the assumption \(\tau\ll \alpha_1/\sqrt{2\ln d}\), we have
+% \(\mu_1^{+}=c\ln d\) for some \(c>0\).
+% Applying Lemma~\ref{lem:gaussian-logistic-moment} yields
+% \begin{equation}
+% \mathbb E_{\xi_1^{j}}\!\left[\hat z^{j}(y_1^{j})\mid z_1^{j}=1\right]
+% =
+% 1-O(d^{-c}).
+% \end{equation}
+
+% For inactive coordinates with \(z_1^{j}=0\), the observation reduces to
+% \(y_1^{j}=\tau\xi_1^{j}\), and the argument of the sigmoid has mean
+% \(-B+\alpha_1^2/(2\tau^2)=-c\ln d\).
+% Lemma~\ref{lem:gaussian-logistic-moment} therefore implies
+% \begin{equation}
+% \left|
+% \mathbb E_{\xi_1^{j}}\!\left[\hat z^{j}(y_1^{j})\mid z_1^{j}=0\right]
+% \right|
+% \le
+% O(d^{-c}).
+% \end{equation}
+% Hence, after averaging over the noise, the strong component is recovered
+% coordinate-wise up to vanishing error.
+
+% \textbf{Weak component (\(k=2\)).}
+% For any coordinate \(j\), active or inactive, the observation is
+% \begin{equation}
+% y_2^{j}=\alpha_2 z_2^{j}+\tau\xi_2^{j}.
+% \end{equation}
+% The condition \(\tau\gg \alpha_2/\sqrt{2\ln d}\) implies that the mean shift in the
+% logistic argument is dominated by the sparsity bias:
+% \begin{equation}
+% \mu_2^{\pm}
+% =
+% \frac{\alpha_2^2(2z_2^{j}-1)}{2\tau^2}-B
+% \le
+% -c'\ln d
+% \end{equation}
+% for some \(c'>0\).
+% Using Lemma~\ref{lem:gaussian-logistic-moment} again, we obtain the uniform bound
+% \begin{equation}
+% \left|
+% \mathbb E_{\xi_2^{j}}\!\left[\hat z^{j}(y_2^{j})\mid z_2^{j}\right]
+% \right|
+% \le
+% O(d^{-c'})
+% \qquad
+% \forall j.
+% \end{equation}
+
+% \textbf{Conclusion.}
+% In the intermediate-noise regime, the noise-averaged posterior mean satisfies
+% \begin{equation}
+% \mathbb E_{\xi}\!\left[\hat z_1^{j}(y_1^{j})\mid z_1^{j}\right]
+% =
+% z_1^{j}+O(d^{-c}),
+% \qquad
+% \mathbb E_{\xi}\!\left[\hat z_2^{j}(y_2^{j})\mid z_2^{j}\right]
+% =
+% O(d^{-c'}),
+% \end{equation}
+% uniformly over coordinates.
+% Thus, after averaging over the Gaussian noise, the strong component is reliably
+% recovered while the weak component remains suppressed, which is exactly the
+% behavior required for the subsequent comparison between
+% \(g(x_\tau)\) and \(\mathbb E[x_0\mid x_\tau]\).
+
+
+% \paragraph{High-noise regime}
+% Assume
+% \(
+% \tau \ge (1+\delta) \frac{\alpha_1}{\sqrt{2\ln d}}
+% \)
+% for some \(\delta > 0\).
+% For any coordinate \(j\) and subspace \(k\in\{1,2\}\), the observation is \(y_{k}^{j} = \alpha_k z_{k}^{j} + \tau \xi_{k}^{j}\).
+% Using standard Gaussian tail bounds, with probability at least \(1 - d^{-1}\), we have \(\max_{j,k} |\xi_{k}^{j}| \le \sqrt{2\ln d}\).
+% In this regime, the signal-to-noise ratio is insufficient to overcome the sparsity bias \(B \approx \ln d\). Specifically, the exponent in the likelihood ratios satisfies
+% \(
+% \ln(e^{-B} L_{\pm 1}^{j}) \le -\delta \ln d
+% \).
+% Substituting this into the scalar denoiser expression, we obtain the upper bound
+% \begin{equation}
+% |\hat z^{j}(y_k^j)|
+% \le
+% \frac{2 d^{-\delta}}{1 + 2 d^{-\delta}}
+% = O(d^{-\delta}).
+% \end{equation}
+% Consequently, the vector estimator satisfies \(\|\hat{\mathbf{z}}_k\|_{\infty} \le O(d^{-\delta})\).
+% The error term is dominated by the unrecovered signal:
+% \begin{equation}
+% \mathrm{Term}_k
+% =
+% \frac{\alpha_k}{\tau^{2}}
+% \mathbf{M}_k\bigl(\hat{\mathbf z}_k - \mathbf z_k\bigr)
+% =
+% -\frac{\alpha_k}{\tau^{2}}\mathbf{M}_k \mathbf z_k + \mathbf{R}_k,
+% \quad \text{where } \|\mathbf{R}_k\|_2 \le O(d^{-\delta}).
+% \end{equation}
+% Summing over subspaces, the score satisfies
+% \begin{equation}
+% \left\| s_{\tau}^{*}(x_{\tau}) - \left( -\frac{x_{\tau}}{\tau^{2}} \right) \right\|_2
+% \le
+% O(d^{-\delta}),
+% \end{equation}
+% holding with high probability. Thus, the score rigorously converges to the global shrinkage score.
+
+
+% \paragraph{Intermediate-noise regime}
+% Assume
+% \(
+% \frac{(1+\delta)\alpha_2}{\sqrt{2\ln d}}
+% \ll
+% \tau
+% \ll
+% \frac{(1-\delta)\alpha_1}{\sqrt{2\ln d}}.
+% \)
+
+% \textbf{Strong component (\(k=1\)):}
+% Consider an active coordinate where \(z_1^j = 1\). The observation is \(y_1^j = \alpha_1 + \tau \xi_1^j\). The condition \(\tau \ll \alpha_1/\sqrt{2\ln d}\) implies that the signal energy exceeds the bias. With probability \(1 - O(d^{-c})\), the likelihood ratio dominates:
+% \(
+% \ln(e^{-B} L_1^j) \ge c \ln d
+% \) for some \(c > 0\).
+% This implies saturation of the denoiser:
+% \(
+% |1 - \hat z^{j}(y_1^j)| \le O(d^{-c})
+% \).
+% Similarly, for inactive coordinates (\(z_1^j=0\)), the noise is sub-threshold, yielding \(|\hat z^{j}(y_1^j)| \le O(d^{-c})\).
+% Thus, the strong signal is recovered with negligible error:
+% \begin{equation}
+% \| \hat{\mathbf z}_1 - \mathbf z_1 \|_2 \le O(d^{-c})
+% \implies
+% \mathrm{Term}_1
+% =
+% O(d^{-c}).
+% \end{equation}
+
+% \textbf{Weak component (\(k=2\)):}
+% Here, the condition \(\tau \gg \alpha_2/\sqrt{2\ln d}\) implies that even for active coordinates (\(z_2^j = \pm 1\)), the signal is insufficient to overcome the bias \(B\).
+% The exponent remains negative: \(\ln(e^{-B} L_{\pm 1}^{j}) \le -c' \ln d\).
+% Thus, the denoiser output is uniformly suppressed:
+% \begin{equation}
+% |\hat z^{j}(y_2^j)| \le O(d^{-c'}) \quad \forall j.
+% \end{equation}
+% The estimator is effectively zero, \(\hat{\mathbf z}_2 = \mathbf{0} + \mathbf{E}_2\) with \(\|\mathbf{E}_2\|_\infty \le O(d^{-c'})\). The error term is:
+% \begin{equation}
+% \mathrm{Term}_2
+% =
+% -\frac{\alpha_2}{\tau^{2}}\mathbf{M}_2\mathbf z_2 + O(d^{-c'}).
+% \end{equation}
+% The resulting score satisfies
+% \begin{equation}
+% s_{\tau}^{*}(x_{\tau})
+% =
+% -\frac{\alpha_2 \mathbf{M}_2\mathbf z_2}{\tau^{2}}
+% -
+% \frac{\epsilon}{\tau}
+% + O(d^{-\min(c,c')}).
+% \end{equation}
+% This proves that the strong component is recovered while the weak component is suppressed with high probability.
+
+
+
+
+% \paragraph{Low-noise regime}
+% When
+% \(
+% \tau \le (1-\delta) \frac{\alpha_2}{\sqrt{2\ln d}},
+% \)
+% the weak component also satisfies the detection condition. For any active coordinate \(z_2^j = \pm 1\), the likelihood ratio is exponentially large, \(e^{-B}L_{\pm 1}^j \ge d^c\), leading to saturation \(|\hat z^j - z^j| \le O(d^{-c})\).
+% Inactive coordinates remain suppressed.
+% Thus, exact recovery holds for both subspaces:
+% \begin{equation}
+% \| \hat{\mathbf z}_1 - \mathbf z_1 \|_2 \le O(d^{-c}),
+% \qquad
+% \| \hat{\mathbf z}_2 - \mathbf z_2 \|_2 \le O(d^{-c}).
+% \end{equation}
+% Both structured error terms vanish asymptotically:
+% \begin{equation}
+% \| \mathrm{Term}_1 \|_2 \le O(d^{-c}),
+% \qquad
+% \| \mathrm{Term}_2 \|_2 \le O(d^{-c}).
+% \end{equation}
+% The score converges to the pure noise score:
+% \begin{equation}
+% s_{\tau}^{*}(x_{\tau})
+% =
+% -\frac{\epsilon}{\tau} + O(d^{-c}).
+% \end{equation}
+% This confirms that with high probability, the generative model perfectly denoises both feature components in the low-noise limit.
+
+% \paragraph{Summary.}
+% The rigorous analysis of the ternary posterior mean confirms a three-phase evolution. By bounding the tail probabilities of the Gaussian noise, we establish that the transitions between suppression, partial recovery, and full recovery occur with error rates bounded by \(O(d^{-c})\). The presence of signed coefficients \(z \in \{0, \pm 1\}\) modifies the saturation targets but preserves the high-probability regime boundaries defined by the signal-to-noise ratios relative to the sparsity bias \(\sqrt{2 \ln d}\).
+
+
+
+
+% \paragraph{Intermediate-noise regime}
+% Assume
+% \(
+% \frac{(1+\delta)\alpha_2}{\sqrt{2\ln d}}
+% \ll
+% \tau
+% \ll
+% \frac{(1-\delta)\alpha_1}{\sqrt{2\ln d}}.
+% \)
+
+% We analyze the noise-averaged posterior mean
+% \(\mathbb E_{\xi_k^{j}}[\hat z^{j}(y_k^{j}) \mid z_k^{j}]\)
+% for each subspace \(k\in\{1,2\}\).
+
+% \textbf{Strong component (\(k=1\)).}
+% Consider first an active coordinate with \(z_1^{j}=1\).
+% The observation satisfies
+% \begin{equation}
+% y_1^{j}
+% =
+% \alpha_1 + \tau \xi_1^{j}.
+% \end{equation}
+% In this regime, the scalar posterior mean is well-approximated by the
+% logistic form
+% \begin{equation}
+% \hat z^{j}(y_1^{j})
+% \approx
+% \sigma\!\left(
+% \frac{2\alpha_1 y_1^{j}-\alpha_1^{2}}{2\tau^{2}} - B
+% \right).
+% \end{equation}
+% Substituting \(y_1^{j}=\alpha_1+\tau\xi_1^{j}\) yields
+% \begin{equation}
+% \hat z^{j}(y_1^{j})
+% \approx
+% \sigma\!\left(
+% \mu_1
+% +
+% \frac{\alpha_1}{\tau}\,\xi_1^{j}
+% \right),
+% \end{equation}
+% where
+% \begin{equation}
+% \mu_1
+% =
+% \frac{\alpha_1^{2}}{2\tau^{2}} - B.
+% \end{equation}
+
+% Since \(\xi_1^{j}\sim\mathcal N(0,1)\), the argument of the sigmoid is a Gaussian
+% random variable
+% \begin{equation}
+% X_1^{j}
+% =
+% \mu_1
+% +
+% \frac{\alpha_1}{\tau}\,\xi_1^{j}
+% \sim
+% \mathcal N\!\left(
+% \mu_1,
+% \frac{\alpha_1^{2}}{\tau^{2}}
+% \right).
+% \end{equation}
+% Under the assumption
+% \(
+% \tau \ll \alpha_1/\sqrt{2\ln d}
+% \),
+% we have \(\mu_1 = c\ln d\) for some constant \(c>0\).
+% Applying Lemma~\ref{lem:gaussian-logistic-moment} with
+% \(X=X_1^{j}\), we obtain
+% \begin{equation}
+% \mathbb E_{\xi_1^{j}}\!\left[\hat z^{j}(y_1^{j}) \mid z_1^{j}=1\right]
+% =
+% \mathbb E\bigl[\sigma(X_1^{j})\bigr]
+% \ge
+% 1 - O(d^{-c}).
+% \end{equation}
+
+% For inactive coordinates with \(z_1^{j}=0\), the observation reduces to
+% \(y_1^{j}=\tau\xi_1^{j}\), and the sigmoid argument becomes
+% \begin{equation}
+% X_{1,0}^{j}
+% =
+% -\!B
+% +
+% \frac{\alpha_1}{\tau}\,\xi_1^{j}
+% \sim
+% \mathcal N\!\left(
+% - B,
+% \frac{\alpha_1^{2}}{\tau^{2}}
+% \right).
+% \end{equation}
+% Since \(B=\Theta(\ln d)\), Lemma~\ref{lem:gaussian-logistic-moment} implies
+% \begin{equation}
+% \left|
+% \mathbb E_{\xi_1^{j}}\!\left[\hat z^{j}(y_1^{j}) \mid z_1^{j}=0\right]
+% \right|
+% \le
+% O(d^{-c}).
+% \end{equation}
+
+% \textbf{Weak component (\(k=2\)).}
+% For any coordinate \(j\), active or inactive, we have
+% \begin{equation}
+% y_2^{j}
+% =
+% \alpha_2 z_2^{j} + \tau \xi_2^{j}.
+% \end{equation}
+% The scalar posterior mean admits the approximation
+% \begin{equation}
+% \hat z^{j}(y_2^{j})
+% \approx
+% \sigma\!\left(
+% \frac{2\alpha_2 y_2^{j}-\alpha_2^{2}}{2\tau^{2}} - B
+% \right).
+% \end{equation}
+% Substituting \(y_2^{j}\) yields
+% \begin{equation}
+% \hat z^{j}(y_2^{j})
+% \approx
+% \sigma\!\left(
+% \mu_2(z_2^{j})
+% +
+% \frac{\alpha_2}{\tau}\,\xi_2^{j}
+% \right),
+% \end{equation}
+% where
+% \begin{equation}
+% \mu_2(z_2^{j})
+% =
+% \frac{\alpha_2^{2}(2z_2^{j}-1)}{2\tau^{2}} - B.
+% \end{equation}
+% Because
+% \(
+% \tau \gg \alpha_2/\sqrt{2\ln d}
+% \),
+% we have uniformly
+% \(
+% \mu_2(z_2^{j}) \le -c'\ln d
+% \)
+% for some \(c'>0\).
+% Thus the sigmoid argument
+% \begin{equation}
+% X_2^{j}
+% =
+% \mu_2(z_2^{j})
+% +
+% \frac{\alpha_2}{\tau}\,\xi_2^{j}
+% \sim
+% \mathcal N\!\left(
+% \mu_2(z_2^{j}),
+% \frac{\alpha_2^{2}}{\tau^{2}}
+% \right)
+% \end{equation}
+% is a Gaussian with large negative mean.
+% Applying Lemma~\ref{lem:gaussian-logistic-moment} again, we obtain the
+% noise-averaged suppression bound
+% \begin{equation}
+% \left|
+% \mathbb E_{\xi_2^{j}}\!\left[\hat z^{j}(y_2^{j}) \mid z_2^{j}\right]
+% \right|
+% \le
+% O(d^{-c'})
+% \qquad
+% \forall j.
+% \end{equation}
+
+% \textbf{Summary.}
+% In the intermediate-noise regime, taking expectation over the Gaussian noise
+% yields
+% \begin{equation}
+% \mathbb E_{\xi}\!\left[\hat z_1^{j}(y_1^{j}) \mid z_1^{j}\right]
+% =
+% z_1^{j} + O(d^{-c}),
+% \qquad
+% \mathbb E_{\xi}\!\left[\hat z_2^{j}(y_2^{j}) \mid z_2^{j}\right]
+% =
+% O(d^{-c'}),
+% \end{equation}
+% uniformly over coordinates.
+% This establishes rigorous recovery of the strong component and suppression of
+% the weak component at the level of noise-averaged posterior means.
+
+
+
+
+
+
+
+
+
+
+
+\newpage
+\appendix
+\section{Technical Lemmas}
+
+
+\begin{lemma}[Asymptotic Threshold for Indicator Activation]
+\label{lemma:indicator-threshold}
+
+Let \(\sigma = \sqrt{\tau}\,\|w_i\|_{2}\), \(\phi(u) = (2\pi)^{-1/2} e^{-u^{2}/2}\), and assume that for some \(0 < c < 1\)
+\begin{equation}
+\frac{\sigma^{2}}{\|w_i\|_{2}}\,
+\phi\!\left(\frac{b_i}{\sigma}\right)
+\;\ge\;
+d^{-c}.
+\end{equation}
+Then the time parameter \(\tau\) satisfies
+\begin{equation}
+\tau
+=
+\Theta\!\left(
+\frac{b_i^{2}}
+{\|w_i\|_{2}^{2}\,\log d}
+\right),
+\qquad
+d\to\infty.
+\end{equation}
+\end{lemma}
+
+\begin{proof}
+Starting from
+\begin{equation}
+\frac{\sigma^{2}}{\|w_i\|_{2}}\,
+(2\pi)^{-1/2}\,
+\exp\!\left(
+-\frac{b_i^{2}}{2\sigma^{2}}
+\right)
+\;\ge\;
+d^{-c},
+\end{equation}
+multiplying both sides by \(\sqrt{2\pi}\,\|w_i\|_{2}\) gives
+\begin{equation}
+\sigma^{2}
+\exp\!\left(
+-\frac{b_i^{2}}{2\sigma^{2}}
+\right)
+\;\ge\;
+K,
+\qquad
+K = \sqrt{2\pi}\,\|w_i\|_{2}\,d^{-c}.
+\end{equation}
+
+Let
+\begin{equation}
+a = \frac{b_i^{2}}{2},
+\qquad
+y = \frac{a}{\sigma^{2}},
+\qquad
+\sigma^{2} = \frac{a}{y}.
+\end{equation}
+The inequality becomes
+\begin{equation}
+\frac{a}{y}\,e^{-y}\ge K.
+\end{equation}
+Equivalently,
+\begin{equation}
+y\,e^{y}\le \frac{a}{K}.
+\end{equation}
+Using the definition of the Lambert \(W\) function,
+\begin{equation}
+y\le W\!\left(\frac{a}{K}\right),
+\qquad
+\sigma^{2}\le \frac{a}{W(a/K)}.
+\end{equation}
+Thus
+\begin{equation}
+\tau
+\le
+\frac{a}{\|w_i\|_{2}^{2}\,W(a/K)}.
+\end{equation}
+
+Substitute
+\begin{equation}
+a = \frac{b_i^{2}}{2},
+\qquad
+K = \sqrt{2\pi}\,\|w_i\|_{2}\,d^{-c},
+\end{equation}
+and define
+\begin{equation}
+x = \frac{b_i^{2} d^{c}}{2\sqrt{2\pi}\,\|w_i\|_{2}}.
+\end{equation}
+Then
+\begin{equation}
+\tau
+\le
+\frac{b_i^{2}}{2\,\|w_i\|_{2}^{2}\,W(x)}.
+\end{equation}
+
+For large \(d\), \(x = \Theta(d^{c})\to\infty\).  
+Using the expansion
+\begin{equation}
+W(x)
+=
+\log x
+-
+\log\log x
++
+\frac{\log\log x}{\log x}
++
+O\!\left(
+\frac{(\log\log x)^{2}}{(\log x)^{2}}
+\right),
+\end{equation}
+and the identities
+\begin{equation}
+\log x = c\log d + O(1),
+\qquad
+\log\log x = \log\log d + O(1),
+\end{equation}
+we obtain
+\begin{equation}
+W(x)
+=
+c\log d
+-
+\log\log d
++
+O\!\left(\frac{\log\log d}{\log d}\right).
+\end{equation}
+Therefore,
+\begin{equation}
+\frac{1}{W(x)}
+=
+\Theta\!\left(\frac{1}{\log d}\right).
+\end{equation}
+Substituting this into the upper bound for \(\tau\) yields
+\begin{equation}
+\tau
+=
+\Theta\!\left(
+\frac{b_i^{2}}
+{\|w_i\|_{2}^{2}\,\log d}
+\right)
+\end{equation}
+\end{proof}
+
+
+
+
+
+\begin{lemma}[Conditional Lower Tail for a Gaussian Component Given a Large Sum]
+\label{lemma:conditional-Xi-lower-bound}
+Let \(X_1,\dots,X_k\) be jointly Gaussian with \(X_i \sim \mathcal N(0,\tau)\), and let
+\begin{equation}
+Y=\sum_{i=1}^{k} X_i ,
+\end{equation}
+so that \(Y \sim \mathcal N(0,k\tau)\).  
+For any threshold \(b_i>0\) and any constant \(0<c<1\), the conditional distribution of \(X_i\) under the event \(Y>b_i\) satisfies
+\begin{equation}
+\Pr\!\left(
+X_i > c\,\frac{b_i}{k} \,\middle|\, Y>b_i
+\right)
+\ge
+1 -
+\exp\!\left(
+-\frac{(1-c)^2}{2}\,
+\frac{(b_i/k)^2}{ \tau(1-\tfrac{1}{k}) }
+\right).
+\end{equation}
+\end{lemma}
+
+\begin{proof}
+Since \(X_1,\dots,X_k\) are jointly Gaussian with \(X_i \sim \mathcal N(0,\tau)\) and
+\begin{equation}
+Y = \sum_{i=1}^{k} X_i ,
+\end{equation}
+the pair \((X_i,Y)\) is bivariate Gaussian.  
+We have
+\begin{equation}
+\operatorname{Cov}(X_i,Y) = \operatorname{Cov}\Bigl(X_i,\sum_{j=1}^{k} X_j\Bigr)
+= \sum_{j=1}^{k} \operatorname{Cov}(X_i,X_j)
+= \operatorname{Var}(X_i)
+= \tau ,
+\end{equation}
+and
+\begin{equation}
+\operatorname{Var}(Y)
+=
+\sum_{j=1}^{k} \operatorname{Var}(X_j)
+=
+k \tau .
+\end{equation}
+Therefore the conditional law of \(X_i\) given \(Y=y\) is Gaussian with
+\begin{equation}
+X_i \mid Y=y \sim \mathcal N\!\left(
+\frac{\operatorname{Cov}(X_i,Y)}{\operatorname{Var}(Y)}\,y,\;
+\operatorname{Var}(X_i) - \frac{\operatorname{Cov}(X_i,Y)^{2}}{\operatorname{Var}(Y)}
+\right)
+=
+\mathcal N\!\left(
+\frac{y}{k},\; \tau\Bigl(1-\frac{1}{k}\Bigr)
+\right).
+\end{equation}
+
+Now condition on the event \(Y>b_i\).  
+By the tower property,
+\begin{equation}
+\mathbb{E}[X_i \mid Y>b_i]
+=
+\mathbb{E}\bigl[ \mathbb{E}[X_i \mid Y] \,\big|\, Y>b_i \bigr]
+=
+\mathbb{E}\bigl[ Y/k \,\big|\, Y>b_i \bigr]
+=
+\frac{1}{k}\,\mathbb{E}[Y \mid Y>b_i] .
+\end{equation}
+Since \(Y\sim \mathcal N(0,k\tau)\), the conditional distribution of \(Y\) given \(Y>b_i\) is a one-dimensional Gaussian truncated to \((b_i,\infty)\), and
+\begin{equation}
+\mathbb{E}[Y \mid Y>b_i] \ge b_i .
+\end{equation}
+Hence
+\begin{equation}
+\mathbb{E}[X_i \mid Y>b_i]
+=
+\frac{1}{k}\,\mathbb{E}[Y \mid Y>b_i]
+\ge
+\frac{b_i}{k}.
+\end{equation}
+
+The conditional variance does not depend on \(Y\), so
+\begin{equation}
+\operatorname{Var}(X_i \mid Y=y)
+=
+\tau\Bigl(1-\frac{1}{k}\Bigr)
+\end{equation}
+for every \(y\), and therefore
+\begin{equation}
+\operatorname{Var}(X_i \mid Y>b_i)
+=
+\tau\Bigl(1-\frac{1}{k}\Bigr).
+\end{equation}
+Thus \(X_i \mid Y>b_i\) is a mixture of Gaussians of the form
+\(\mathcal N(y/k,\, \tau(1-1/k))\) with \(y>b_i\), so its mean is at least \(b_i/k\) and its variance is \(\tau(1-1/k)\).
+
+Fix a constant \(c\) with \(0<c<1\).  
+Write
+\begin{equation}
+\mu_i = \mathbb{E}[X_i \mid Y>b_i],\qquad
+\sigma_i^{2} = \operatorname{Var}(X_i \mid Y>b_i)
+=
+\tau\Bigl(1-\frac{1}{k}\Bigr).
+\end{equation}
+We have \(\mu_i \ge b_i/k\).  
+Consider any Gaussian random variable \(Z \sim \mathcal N(\mu,\sigma^{2})\) and any threshold \(u<\mu\).  
+The Gaussian tail bound
+\begin{equation}
+\Phi(-x) \le \exp\!\left(-\frac{x^{2}}{2}\right)
+\quad\text{for all } x>0
+\end{equation}
+implies
+\begin{equation}
+\Pr(Z \le u)
+=
+\Pr\!\left(
+\frac{Z-\mu}{\sigma}
+\le
+\frac{u-\mu}{\sigma}
+\right)
+=
+\Phi\!\left(\frac{u-\mu}{\sigma}\right)
+\le
+\exp\!\left(
+-\frac{(\mu-u)^{2}}{2\sigma^{2}}
+\right),
+\end{equation}
+and therefore
+\begin{equation}
+\Pr(Z > u)
+=
+1-\Pr(Z \le u)
+\ge
+1-
+\exp\!\left(
+-\frac{(\mu-u)^{2}}{2\sigma^{2}}
+\right).
+\end{equation}
+
+Apply this with
+\begin{equation}
+\mu = \mu_i,\qquad
+\sigma^{2} = \sigma_i^{2} = \tau\Bigl(1-\frac{1}{k}\Bigr),\qquad
+u = c\,\frac{b_i}{k},
+\end{equation}
+and use \(\mu_i \ge b_i/k\).  
+Then \(\mu_i - u \ge (1-c)\,b_i/k\), so
+\begin{equation}
+\Pr\!\left(
+X_i > c\,\frac{b_i}{k} \,\middle|\, Y>b_i
+\right)
+\ge
+1-
+\exp\!\left(
+-\frac{(1-c)^{2}}{2}\,
+\frac{(b_i/k)^{2}}{\,\tau(1-\tfrac{1}{k})\,}
+\right).
+\end{equation}
+This is exactly the desired inequality.
+\end{proof}
+
+
+
+
+
+\begin{lemma}[Two–regime Gaussian threshold behavior]
+\label{lemma:gaussian-two-regime}
+Let \(X_1 \sim \mathcal N(a_1,\tau)\) and \(X_2 \sim \mathcal N(a_2,\tau)\) be two Gaussian random variables with the same variance \(\tau>0\). Assume the decision threshold \(b_\ell\) lies between the means:
+\begin{equation}
+a_1 < b_\ell < a_2 .
+\end{equation}
+Define the signed gaps (distances to the threshold) as:
+\begin{equation}
+\Delta_1 = b_\ell - a_1 > 0,
+\qquad
+\Delta_2 = b_\ell - a_2 < 0 .
+\end{equation}
+Then, for any \(\delta \in (0, 1/2)\), the following two regimes hold:
+
+\begin{itemize}
+\item[(A)] \textit{Separable Regime (Small \(\tau\))}:
+If the noise level satisfies
+\begin{equation}
+\sqrt{\tau}
+\le
+\min\!\left\{
+\frac{\Delta_1}{\sqrt{2\log(1/\delta)}},
+\frac{|\Delta_2|}{\sqrt{2\log(1/\delta)}}
+\right\},
+\end{equation}
+then the error probabilities are bounded by \(\delta\):
+\begin{equation}
+\Pr(X_1 \ge b_\ell) \le \delta,
+\qquad
+\Pr(X_2 \ge b_\ell) \ge 1-\delta .
+\end{equation}
+
+\item[(B)] \textit{Mixed Regime (Large \(\tau\))}:
+If the noise level satisfies
+\begin{equation}
+\sqrt{\tau}
+\ge
+\max\!\left\{
+\frac{|\Delta_1|}{\sqrt{2\pi}\,\delta},
+\frac{|\Delta_2|}{\sqrt{2\pi}\,\delta}
+\right\},
+\end{equation}
+then the probabilities are close to random guessing:
+\begin{equation}
+\bigl|\Pr(X_1 \ge b_\ell) - \tfrac12\bigr| \le \delta,
+\qquad
+\bigl|\Pr(X_2 \ge b_\ell) - \tfrac12\bigr| \le \delta .
+\end{equation}
+\end{itemize}
+\end{lemma}
+
+\begin{proof}
+For \(X_j \sim \mathcal N(a_j,\tau)\), we express the tail probability in terms of the standard normal CDF \(\Phi(\cdot)\):
+\begin{equation}
+\label{eq:prob-def}
+\Pr(X_j \ge b_\ell)
+=
+1 - \Phi\!\left(\frac{b_\ell - a_j}{\sqrt{\tau}}\right)
+=
+1 - \Phi\!\left(\frac{\Delta_j}{\sqrt{\tau}}\right).
+\end{equation}
+
+\textit{Proof of (A).}
+Define the normalized distances \(z_1 = \frac{\Delta_1}{\sqrt{\tau}}\) and \(z_2 = \frac{-\Delta_2}{\sqrt{\tau}}\).
+From the condition in Regime (A), we have:
+\begin{equation}
+z_1 \ge \sqrt{2\log(1/\delta)} \quad \text{and} \quad z_2 \ge \sqrt{2\log(1/\delta)}.
+\end{equation}
+We utilize the standard Gaussian tail bound (Chernoff bound), which states that for any \(z > 0\), \(1 - \Phi(z) \le \exp(-z^2/2)\).
+Applying this to \(X_1\):
+\begin{equation}
+\Pr(X_1 \ge b_\ell)
+=
+1 - \Phi(z_1)
+\le
+\exp\!\left(-\frac{z_1^2}{2}\right)
+\le
+\exp\!\left(-\frac{2\log(1/\delta)}{2}\right)
+= \delta.
+\end{equation}
+Similarly for \(X_2\), noting that \(\Delta_2 = -\sqrt{\tau}z_2\):
+\begin{equation}
+\Pr(X_2 \ge b_\ell)
+=
+1 - \Phi(-z_2)
+=
+\Phi(z_2)
+\ge
+1 - \exp\!\left(-\frac{z_2^2}{2}\right)
+\ge 1 - \delta.
+\end{equation}
+
+\textit{Proof of (B).}
+Define the standardized gaps \(x_j = \frac{\Delta_j}{\sqrt{\tau}}\).
+The condition in Regime (B) implies:
+\begin{equation}
+|x_j| \le \sqrt{2\pi}\,\delta, \quad \text{for } j \in \{1,2\}.
+\end{equation}
+Recall that the standard normal PDF \(\phi(u) = \frac{1}{\sqrt{2\pi}}e^{-u^2/2}\) is bounded by \(\frac{1}{\sqrt{2\pi}}\). By the Mean Value Theorem, for any \(x\):
+\begin{equation}
+\bigl|\Phi(x) - \tfrac12\bigr|
+=
+\bigl|\Phi(x) - \Phi(0)\bigr|
+\le
+\sup_{u \in \mathbb{R}} |\phi(u)| \cdot |x|
+=
+\frac{|x|}{\sqrt{2\pi}}.
+\end{equation}
+From \eqref{eq:prob-def}, we have \(\Pr(X_j \ge b_\ell) = \Phi(-x_j)\).
+Thus:
+\begin{equation}
+\bigl|\Pr(X_j \ge b_\ell) - \tfrac12\bigr|
+=
+\bigl|\Phi(-x_j) - \Phi(0)\bigr|
+\le
+\frac{|-x_j|}{\sqrt{2\pi}}
+\le
+\frac{\sqrt{2\pi}\,\delta}{\sqrt{2\pi}}
+=
+\delta.
+\end{equation}
+This completes the proof.
+\end{proof}
+
+
+
+
+
+\begin{lemma}[Gaussian logistic moment (standard approximation)]
+\label{lem:gaussian-logistic-moment}
+Let \(X \sim \mathcal N(\mu,s^{2})\) and \(\sigma(x)=\frac{1}{1+e^{-x}}\). Then
+\begin{equation}
+\mathbb E[\sigma(X)]
+=
+\int_{\mathbb R}\sigma(x)\,\frac{1}{\sqrt{2\pi}s}
+\exp\!\left(-\frac{(x-\mu)^{2}}{2s^{2}}\right)\,dx,
+\end{equation}
+and admits the widely used approximation
+\begin{equation}
+\mathbb E[\sigma(X)]
+\approx
+\sigma\!\left(
+\frac{\mu}{\sqrt{1+\frac{\pi^{2}}{8}s^{2}}}
+\right).
+\end{equation}
+\end{lemma}
+
+\begin{proof}
+Start from the definition
+\begin{equation}
+\mathbb E[\sigma(X)]
+=
+\int_{\mathbb R}\frac{1}{1+e^{-x}}\,
+\frac{1}{\sqrt{2\pi}s}
+\exp\!\left(-\frac{(x-\mu)^{2}}{2s^{2}}\right)\,dx.
+\end{equation}
+There is no elementary closed form for this integral. To obtain an analytic expression, use the standard approximation that matches the logistic link to a probit link:
+\begin{equation}
+\sigma(x)
+\approx
+\Phi(\kappa x),
+\qquad
+\kappa = \sqrt{\frac{8}{\pi^{2}}}.
+\end{equation}
+Under this substitution,
+\begin{equation}
+\mathbb E[\sigma(X)]
+\approx
+\mathbb E[\Phi(\kappa X)].
+\end{equation}
+Let \(Z\sim\mathcal N(0,1)\) independent of \(X\). Using \(\Phi(t)=\Pr(Z\le t)\),
+\begin{equation}
+\mathbb E[\Phi(\kappa X)]
+=
+\mathbb E\bigl[\Pr(Z\le \kappa X\mid X)\bigr]
+=
+\Pr(Z\le \kappa X)
+=
+\Pr(\kappa X - Z \ge 0).
+\end{equation}
+Since \(\kappa X - Z\) is Gaussian with mean \(\kappa\mu\) and variance
+\(\kappa^{2}s^{2}+1\), we have
+\begin{equation}
+\Pr(\kappa X - Z \ge 0)
+=
+\Phi\!\left(
+\frac{\kappa\mu}{\sqrt{1+\kappa^{2}s^{2}}}
+\right).
+\end{equation}
+Applying the inverse substitution \(\Phi(\kappa u)\approx \sigma(u)\) gives
+\begin{equation}
+\mathbb E[\sigma(X)]
+\approx
+\sigma\!\left(
+\frac{\mu}{\sqrt{1+\kappa^{-2}s^{2}}}
+\right)
+=
+\sigma\!\left(
+\frac{\mu}{\sqrt{1+\frac{\pi^{2}}{8}s^{2}}}
+\right),
+\end{equation}
+which completes the proof.
+\end{proof}
+
+
+
+
+
+
+
+
+
+\end{document}
