@@ -143,9 +143,9 @@ Moreover, the alignment along directions orthogonal to the signal subspace, name
 \label{sec:stage0}
 
 In this section, we analyze Stage~0 of the diffusion model training dynamics, corresponding to the early training iterations \( t \leq T_0 \), where
-\begin{equation}
+\(
 T_0 = \Theta\!\left(\frac{d \log d}{\eta}\right)
-\end{equation}
+\)
 denotes the time scale at which the energy of each neuron has not yet significantly deviated from its random initialization, i.e.,
 \(
 \frac{\|w_i^{(T_0)}\|_2^2 + \|v_i^{(T_0)}\|_2^2}{2}
@@ -161,27 +161,85 @@ Moreover, the alignment along directions orthogonal to the signal subspace, name
 Since \( x_0 = \alpha_1 \mathbf{M}_1 z_1 + \alpha_2 \mathbf{M}_2 z_2 \) with \( \alpha_1 = \Theta(1) \) and \( \alpha_2 = \Theta(1/d^{c_0}) \), the gradient contributions from \( \mathbf{M}_1 \) dominate those from \( \mathbf{M}_2 \).
 Specifically, the expected gradient along \( \mathbf{M}_{1j} \) scales as \( \mathbb{E}[z_{1j}^2] = \Theta(1/d) \), while the effective contribution from \( \mathbf{M}_{2j} \) is suppressed by the factor \( \alpha_2^2 = \Theta(1/d^{2c_0}) \).
 
-Using the projected gradient dynamics from Section~\ref{sec:setup}, with \( b_i^{(t)} = 0 \), we obtain:
+
+
+
+Since \( x_0 = \alpha_1 \mathbf{M}_1 z_1 + \alpha_2 \mathbf{M}_2 z_2 \) with \( \alpha_1 = \Theta(1) \) and \( \alpha_2 = \Theta(1/d^{c_0}) \), the gradient contributions from \( \mathbf{M}_1 \) dominate those from \( \mathbf{M}_2 \).
+
+
+We now project the SGD updates onto the feature directions \( \mathbf{M}_{1j} \) and \( \mathbf{M}_{2j} \).
+Since \( x_0 = \alpha_1 \mathbf{M}_1 z_1 + \alpha_2 \mathbf{M}_2 z_2 \), the projected updates become:
 \begin{equation}
-\label{eq:stage0-M1-dynamics}
+\label{eq:stage0-w-proj}
 \begin{aligned}
-\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle 
-&= \left(1 + \frac{\eta C_1}{d}\right)^t \cdot \frac{\langle w_i^{(0)}, \mathbf{M}_{1j} \rangle + \langle v_i^{(0)}, \mathbf{M}_{1j} \rangle}{2},
+\langle w_i^{(t+1)}, \mathbf{M}_{kj} \rangle
+&=
+\langle w_i^{(t)}, \mathbf{M}_{kj} \rangle
++
+\eta\,
+\langle v_i^{(t)}, \mathbf{M}_{kj} \rangle\, 
+\alpha_k z_{kj}\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+\pm Err_t,
 \end{aligned}
 \end{equation}
-where \( C_1 = \Theta(\alpha_1^2) = \Theta(1) \).
-
-For the weaker component \( \mathbf{M}_2 \), the dynamics satisfy:
 \begin{equation}
-\label{eq:stage0-M2-dynamics}
+\label{eq:stage0-v-proj}
 \begin{aligned}
-\langle w_i^{(t)}, \mathbf{M}_{2j} \rangle 
-&= \left(1 + \frac{\eta C_2}{d}\right)^t \cdot \frac{\langle w_i^{(0)}, \mathbf{M}_{2j} \rangle + \langle v_i^{(0)}, \mathbf{M}_{2j} \rangle}{2},
+\langle v_i^{(t+1)}, \mathbf{M}_{kj} \rangle
+&=
+\langle v_i^{(t)}, \mathbf{M}_{kj} \rangle
++
+\eta\,
+\langle w_i^{(t)}, \mathbf{M}_{kj} \rangle\, 
+\alpha_k z_{kj}\,
+\mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge b_i^{(t)} \}
+\pm Err_t,
 \end{aligned}
 \end{equation}
-where \( C_2 = \Theta(\alpha_2^2) = \Theta(1/d^{2c_0}) \ll C_1 \).
+for \( k \in \{1, 2\} \).
 
-This disparity in growth rates ensures that \( \mathbf{M}_1 \) alignment dominates during Stage~0, while \( \mathbf{M}_2 \) alignment remains close to initialization.
+With \( b_i^{(t)} = 0 \) in Stage~0, taking expectation over \( z_{kj} \sim \mathrm{Bernoulli}(1/d) \) and the gating event yields:
+\begin{equation}
+\mathbb{E}\left[ \alpha_k z_{kj} \cdot \mathbf{1}\{ w_i^{(t)\top} x_{\tau} \ge 0 \} \right] = \Theta\left(\frac{\alpha_k}{d}\right).
+\end{equation}
+
+The coupled dynamics can be written as:
+\begin{equation}
+\begin{bmatrix}
+\langle w_i^{(t+1)}, \mathbf{M}_{kj} \rangle \\
+\langle v_i^{(t+1)}, \mathbf{M}_{kj} \rangle
+\end{bmatrix}
+=
+\begin{bmatrix}
+1 & a_{k,t} \\
+a_{k,t} & 1
+\end{bmatrix}
+\begin{bmatrix}
+\langle w_i^{(t)}, \mathbf{M}_{kj} \rangle \\
+\langle v_i^{(t)}, \mathbf{M}_{kj} \rangle
+\end{bmatrix}
+\pm Err_t,
+\end{equation}
+where
+\begin{equation}
+a_{1,t} = \Theta\left(\frac{\eta}{d}\right), \qquad
+a_{2,t} = \Theta\left(\frac{\alpha_2 \eta}{d}\right) = \Theta\left(\frac{\eta}{d^{1+c_0}}\right).
+\end{equation}
+
+Iterating the recursion yields:
+\begin{equation}
+\label{eq:stage0-closed-form}
+\langle w_i^{(t)}, \mathbf{M}_{kj} \rangle
+=
+\left(1 + a_{k,t}\right)^{t}\,
+\frac{\langle w_i^{(0)}, \mathbf{M}_{kj} \rangle + \langle v_i^{(0)}, \mathbf{M}_{kj} \rangle}{2}.
+\end{equation}
+
+By symmetry of the coupled dynamics, the same closed-form holds for \( \langle v_i^{(t)}, \mathbf{M}_{kj} \rangle \).
+
+
+
 
 
 \subsection{Lower Bound of \(\mathbf{M}_1\) Alignment}
@@ -312,6 +370,10 @@ For directions orthogonal to the signal subspace:
 
 These results demonstrate that during Stage~0, the dominant features in \( \mathbf{M}_1 \) are learned by neurons in \( S_{1j,\mathrm{sure}} \), while the fine-grained features in \( \mathbf{M}_2 \) remain dormant due to the signal strength disparity \( \alpha_1 \gg \alpha_2 \).
 This establishes the foundation for the coarse-to-fine learning phenomenon in diffusion models.
+
+
+
+
 
 
 
