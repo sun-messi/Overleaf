@@ -111,6 +111,218 @@ b_i^{(t+1)}
 \end{equation}
 
 
+
+
+
+\section{Stage 0: Feature initialize}
+\label{sec:stage0}
+
+In this section, we analyze Stage~0 of the diffusion model training dynamics, corresponding to the early training iterations
+\( t \leq T_0 \),
+where
+\(
+T_0 = \Theta\!\left(\frac{d \log d}{\eta}\right)
+\)
+denotes the time scale at which the energy of each neuron has not yet significantly deviated from its random initialization, i.e.,
+\(
+\frac{\|w_i^{(T_0)}\|_2^2 + \|v_i^{(T_0)}\|_2^2}{2}
+\ge
+\|w_i^{(0)}\|_2^2 + \|v_i^{(0)}\|_2^2
+\)
+for all \( i \in [m] \).
+
+Throughout this stage, we set \( b_i^{(t)} = 0 \), so that the training dynamics are governed purely by the denoising gradients induced by the corrupted observations.
+
+For every neuron \( i \in [m] \), the weights \( w_i \) and \( v_i \) exhibit a pronounced growth in alignment with the dominant signal component \( \mathbf{M}_1 \), while the growth of alignment with the weaker component \( \mathbf{M}_2 \) remains strictly smaller.
+Moreover, the alignment along directions orthogonal to the signal subspace, namely \( \mathbf{M}_1^\perp \) and \( \mathbf{M}_2^\perp \), exhibits only negligible increase throughout this stage.
+
+
+
+
+\section{Stage 0: Feature Initialization}
+\label{sec:stage0}
+
+In this section, we analyze Stage~0 of the diffusion model training dynamics, corresponding to the early training iterations \( t \leq T_0 \), where
+\begin{equation}
+T_0 = \Theta\!\left(\frac{d \log d}{\eta}\right)
+\end{equation}
+denotes the time scale at which the energy of each neuron has not yet significantly deviated from its random initialization, i.e.,
+\(
+\frac{\|w_i^{(T_0)}\|_2^2 + \|v_i^{(T_0)}\|_2^2}{2}
+\ge
+\|w_i^{(0)}\|_2^2 + \|v_i^{(0)}\|_2^2
+\)
+for all \( i \in [m] \).
+Throughout this stage, we set \( b_i^{(t)} = 0 \), so that the training dynamics are governed purely by the denoising gradients induced by the corrupted observations.
+
+For every neuron \( i \in [m] \), the weights \( w_i \) and \( v_i \) exhibit a pronounced growth in alignment with the dominant signal component \( \mathbf{M}_1 \), while the growth of alignment with the weaker component \( \mathbf{M}_2 \) remains strictly smaller.
+Moreover, the alignment along directions orthogonal to the signal subspace, namely \( \mathbf{M}_1^\perp \) and \( \mathbf{M}_2^\perp \), exhibits only negligible increase throughout this stage.
+
+Since \( x_0 = \alpha_1 \mathbf{M}_1 z_1 + \alpha_2 \mathbf{M}_2 z_2 \) with \( \alpha_1 = \Theta(1) \) and \( \alpha_2 = \Theta(1/d^{c_0}) \), the gradient contributions from \( \mathbf{M}_1 \) dominate those from \( \mathbf{M}_2 \).
+Specifically, the expected gradient along \( \mathbf{M}_{1j} \) scales as \( \mathbb{E}[z_{1j}^2] = \Theta(1/d) \), while the effective contribution from \( \mathbf{M}_{2j} \) is suppressed by the factor \( \alpha_2^2 = \Theta(1/d^{2c_0}) \).
+
+Using the projected gradient dynamics from Section~\ref{sec:setup}, with \( b_i^{(t)} = 0 \), we obtain:
+\begin{equation}
+\label{eq:stage0-M1-dynamics}
+\begin{aligned}
+\langle w_i^{(t)}, \mathbf{M}_{1j} \rangle 
+&= \left(1 + \frac{\eta C_1}{d}\right)^t \cdot \frac{\langle w_i^{(0)}, \mathbf{M}_{1j} \rangle + \langle v_i^{(0)}, \mathbf{M}_{1j} \rangle}{2},
+\end{aligned}
+\end{equation}
+where \( C_1 = \Theta(\alpha_1^2) = \Theta(1) \).
+
+For the weaker component \( \mathbf{M}_2 \), the dynamics satisfy:
+\begin{equation}
+\label{eq:stage0-M2-dynamics}
+\begin{aligned}
+\langle w_i^{(t)}, \mathbf{M}_{2j} \rangle 
+&= \left(1 + \frac{\eta C_2}{d}\right)^t \cdot \frac{\langle w_i^{(0)}, \mathbf{M}_{2j} \rangle + \langle v_i^{(0)}, \mathbf{M}_{2j} \rangle}{2},
+\end{aligned}
+\end{equation}
+where \( C_2 = \Theta(\alpha_2^2) = \Theta(1/d^{2c_0}) \ll C_1 \).
+
+This disparity in growth rates ensures that \( \mathbf{M}_1 \) alignment dominates during Stage~0, while \( \mathbf{M}_2 \) alignment remains close to initialization.
+
+
+\subsection{Lower Bound of \(\mathbf{M}_1\) Alignment}
+
+We first establish a lower bound for \( \|\mathbf{M}_1 \mathbf{M}_1^\top w_i^{(t)}\|_2^2 \).
+From Eq.~\eqref{eq:stage0-M1-dynamics}, we have:
+\begin{equation}
+\label{eq:stage0-M1M1-lower}
+\begin{aligned}
+\|\mathbf{M}_1 \mathbf{M}_1^\top w_i^{(t)}\|_2^2 
+&= \sum_{j=1}^{d} \langle w_i^{(t)}, \mathbf{M}_{1j} \rangle^2 \\
+&= \left(1 + \frac{\eta C_1}{d}\right)^{2t} \cdot \frac{\|\mathbf{M}_1 \mathbf{M}_1^\top w_i^{(0)}\|_2^2 + \|\mathbf{M}_1 \mathbf{M}_1^\top v_i^{(0)}\|_2^2}{4}.
+\end{aligned}
+\end{equation}
+
+For \( \mathbf{M}_2 \), the corresponding bound is:
+\begin{equation}
+\label{eq:stage0-M2M2-bound}
+\begin{aligned}
+\|\mathbf{M}_2 \mathbf{M}_2^\top w_i^{(t)}\|_2^2 
+&= \left(1 + \frac{\eta C_2}{d}\right)^{2t} \cdot \frac{\|\mathbf{M}_2 \mathbf{M}_2^\top w_i^{(0)}\|_2^2 + \|\mathbf{M}_2 \mathbf{M}_2^\top v_i^{(0)}\|_2^2}{4}.
+\end{aligned}
+\end{equation}
+
+Since \( C_2 \ll C_1 \), the growth factor for \( \mathbf{M}_2 \) is strictly smaller than that for \( \mathbf{M}_1 \) over the same time horizon.
+
+For the orthogonal complement, the alignment remains bounded:
+\begin{equation}
+\label{eq:stage0-perp-bound}
+\|\mathbf{M}_1^\perp (\mathbf{M}_1^\perp)^\top w_i^{(t)}\|_2^2 
+\leq \left(1 + \frac{1}{\mathrm{poly}(d)}\right) \|\mathbf{M}_1^\perp (\mathbf{M}_1^\perp)^\top w_i^{(0)}\|_2^2.
+\end{equation}
+
+This demonstrates that during Stage~0, the signal components \( \mathbf{M}_1 \) grow exponentially, while orthogonal components remain essentially unchanged.
+
+
+\subsection{Alignment Growth for \( i \in S_{1j,\mathrm{sure}} \)}
+
+This subsection provides an analysis of the alignment growth for neurons \( i \in S_{1j,\mathrm{sure}} \).
+Specifically, we demonstrate that for every \( j \in [d] \), if \( i \in S_{1j,\mathrm{sure}} \), the alignment \( \langle \mathbf{M}_{1j}, w_i^{(t)} \rangle^2 \) increases exponentially when \( t \le T_0 \).
+
+We now prove the lower bound of \( |\langle w_i^{(T_0)}, \mathbf{M}_{1j} \rangle|^2 \) for \( i \in S_{1j,\mathrm{sure}} \):
+\begin{equation}
+\label{eq:stage0-sure-lower}
+\begin{aligned}
+|\langle w_i^{(T_0)}, \mathbf{M}_{1j} \rangle|^2 
+&= \left(1 + \frac{\eta C_1}{d}\right)^{2T_0} \left(\frac{\langle w_i^{(0)}, \mathbf{M}_{1j} \rangle + \langle v_i^{(0)}, \mathbf{M}_{1j} \rangle}{2}\right)^2 \\
+&\overset{(a)}{\geq} \left(1 + \frac{\eta C_1}{d}\right)^{2T_0} \cdot \frac{(c_1+c_2)\log d}{d} \cdot \frac{\|\mathbf{M}_1 \mathbf{M}_1^\top w_i^{(0)}\|_2^2 + \|\mathbf{M}_1 \mathbf{M}_1^\top v_i^{(0)}\|_2^2}{4} \\
+&\overset{(b)}{=} \frac{(c_1+c_2)\log d}{d} \cdot \frac{\|\mathbf{M}_1 \mathbf{M}_1^\top w_i^{(T_0)}\|_2^2 + \|\mathbf{M}_1 \mathbf{M}_1^\top v_i^{(T_0)}\|_2^2}{2} \\
+&\overset{(c)}{\geq} \frac{(c_1+c_2)\log d}{d} \cdot \frac{\|w_i^{(T_0)}\|_2^2 + \|v_i^{(T_0)}\|_2^2 - \|w_i^{(0)}\|_2^2 - \|v_i^{(0)}\|_2^2}{2} \\
+&\overset{(d)}{>} \frac{(1+c_0-\gamma c_0)\log d}{d} \cdot \frac{\|w_i^{(T_0)}\|_2^2 + \|v_i^{(T_0)}\|_2^2}{2}.
+\end{aligned}
+\end{equation}
+
+In step \((a)\), we use Definition~\ref{def:sure-set}.
+In step \((b)\), we apply Eq.~\eqref{eq:stage0-M1M1-lower}.
+In step \((c)\), we use the energy condition \( \frac{\|w_i^{(T_0)}\|_2^2 + \|v_i^{(T_0)}\|_2^2}{2} \ge \|w_i^{(0)}\|_2^2 + \|v_i^{(0)}\|_2^2 \).
+In step \((d)\), we use \( c_1 + c_2 > 2(1+c_0-\gamma c_0) \).
+
+
+\subsection{Upper Bound of Alignment for \( i \notin S_{1j,\mathrm{pot}} \)}
+
+In this subsection, we analyze the alignment of neurons \( i \notin S_{1j,\mathrm{pot}} \) with the feature \( \mathbf{M}_{1j} \) and provide an upper bound for \( |\langle w_i^{(T_0)}, \mathbf{M}_{1j} \rangle|^2 \).
+While neurons \( i \notin S_{1j,\mathrm{pot}} \) still exhibit exponential growth in their alignment, their weaker initialization results in significantly smaller alignment compared to neurons in \( S_{1j,\mathrm{sure}} \).
+
+\begin{equation}
+\label{eq:stage0-nonsure-upper}
+\begin{aligned}
+|\langle w_i^{(T_0)}, \mathbf{M}_{1j} \rangle|^2 
+&= \left(1 + \frac{\eta C_1}{d}\right)^{2T_0} \left(\frac{\langle w_i^{(0)}, \mathbf{M}_{1j} \rangle + \langle v_i^{(0)}, \mathbf{M}_{1j} \rangle}{2}\right)^2 \\
+&\overset{(a)}{\leq} \left(1 + \frac{\eta C_1}{d}\right)^{2T_0} \cdot \frac{(c_1-c_2)\log d}{d} \cdot \frac{\|\mathbf{M}_1 \mathbf{M}_1^\top w_i^{(0)}\|_2^2 + \|\mathbf{M}_1 \mathbf{M}_1^\top v_i^{(0)}\|_2^2}{4} \\
+&= \frac{(c_1-c_2)\log d}{d} \cdot \frac{\|\mathbf{M}_1 \mathbf{M}_1^\top w_i^{(T_0)}\|_2^2 + \|\mathbf{M}_1 \mathbf{M}_1^\top v_i^{(T_0)}\|_2^2}{2} \\
+&< \frac{(1+c_0-3\gamma c_0)\log d}{d} \cdot \frac{\|w_i^{(T_0)}\|_2^2 + \|v_i^{(T_0)}\|_2^2}{2}.
+\end{aligned}
+\end{equation}
+
+In step \((a)\), we use the definition of \( S_{1j,\mathrm{pot}} \), which captures the reduced alignment for neurons outside the potential set.
+
+This inequality highlights the slower alignment for neurons outside \( S_{1j,\mathrm{pot}} \), distinguishing their behavior from neurons in \( S_{1j,\mathrm{sure}} \).
+
+
+\subsection{Weak Growth of \(\mathbf{M}_2\) Alignment}
+
+For the fine-grained dictionary \( \mathbf{M}_2 \), all neurons exhibit weak growth during Stage~0 due to the suppressed signal strength \( \alpha_2 = \Theta(1/d^{c_0}) \).
+
+For any neuron \( i \in [m] \) and any \( j \in [d] \):
+\begin{equation}
+\label{eq:stage0-M2-weak}
+\begin{aligned}
+|\langle w_i^{(T_0)}, \mathbf{M}_{2j} \rangle|^2 
+&= \left(1 + \frac{\eta C_2}{d}\right)^{2T_0} \left(\frac{\langle w_i^{(0)}, \mathbf{M}_{2j} \rangle + \langle v_i^{(0)}, \mathbf{M}_{2j} \rangle}{2}\right)^2 \\
+&\leq \left(1 + \frac{\eta}{d^{1+2c_0}}\right)^{2T_0} \cdot O(\sigma_0^2) \\
+&= O(\sigma_0^2),
+\end{aligned}
+\end{equation}
+since \( T_0 = \Theta(d\log d / \eta) \) and \( (1 + \eta/d^{1+2c_0})^{T_0} = 1 + o(1) \) when \( c_0 > 0 \).
+
+This demonstrates that the \( \mathbf{M}_2 \) components remain at initialization scale throughout Stage~0.
+
+
+\subsection{Summary of Stage 0}
+
+At the end of Stage~0 (\( t = T_0 \)), the alignment properties are summarized as follows.
+
+For neurons \( i \in S_{1j,\mathrm{sure}} \), the \( \mathbf{M}_1 \) alignment satisfies:
+\begin{equation}
+\label{eq:stage0-summary-sure}
+|\langle w_i^{(T_0)}, \mathbf{M}_{1j} \rangle|^2 > \frac{(1+c_0-\gamma c_0)\log d}{d} \cdot \frac{\|w_i^{(T_0)}\|_2^2 + \|v_i^{(T_0)}\|_2^2}{2}.
+\end{equation}
+
+For neurons \( i \notin S_{1j,\mathrm{pot}} \), the \( \mathbf{M}_1 \) alignment satisfies:
+\begin{equation}
+\label{eq:stage0-summary-nonsure}
+|\langle w_i^{(T_0)}, \mathbf{M}_{1j} \rangle|^2 < \frac{(1+c_0-3\gamma c_0)\log d}{d} \cdot \frac{\|w_i^{(T_0)}\|_2^2 + \|v_i^{(T_0)}\|_2^2}{2}.
+\end{equation}
+
+For the fine-grained dictionary \( \mathbf{M}_2 \), all neurons satisfy:
+\begin{equation}
+\label{eq:stage0-summary-M2}
+|\langle w_i^{(T_0)}, \mathbf{M}_{2j} \rangle|^2 = O(\sigma_0^2).
+\end{equation}
+
+For directions orthogonal to the signal subspace:
+\begin{equation}
+\label{eq:stage0-summary-perp}
+|\langle w_i^{(T_0)}, \mathbf{M}_{1j}^\perp \rangle|^2, \; |\langle w_i^{(T_0)}, \mathbf{M}_{2j}^\perp \rangle|^2 < O\left(\frac{1}{d_1}\right) \cdot \frac{\|w_i^{(T_0)}\|_2^2 + \|v_i^{(T_0)}\|_2^2}{2}.
+\end{equation}
+
+These results demonstrate that during Stage~0, the dominant features in \( \mathbf{M}_1 \) are learned by neurons in \( S_{1j,\mathrm{sure}} \), while the fine-grained features in \( \mathbf{M}_2 \) remain dormant due to the signal strength disparity \( \alpha_1 \gg \alpha_2 \).
+This establishes the foundation for the coarse-to-fine learning phenomenon in diffusion models.
+
+
+
+
+
+
+
+
+
+
+
 \section{Stage I: \(\mathbf{M}_{1}\) Alignment Phase}
 During the initial training stage, when \( \tau_1< \tau < \tau_{\max}\) and 
 \(\mathbf{x}_{\tau} = \mathbf{x}_0 + \tau \epsilon\), 
